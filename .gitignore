@@ -1,0 +1,43 @@
+# Ignore raw neuroimaging data and clinical ratings (ADNI Data Use Agreement compliance)
+*.hdr
+*.img
+*.xlsx
+*.xls
+*.csv
+qc_report.csv
+e-CVRS_automated_scores.csv
+results/
+case_out/
+
+# Python cache & build files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Local IDE and config files
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
