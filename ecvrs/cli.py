@@ -115,6 +115,12 @@ def run_evaluate(args):
     
     # Merge on RID
     df = pd.merge(df_auto, df_manual, on='RID', suffixes=('_auto', '_manual'))
+    
+    # Exclude RID 4764 due to extraction/loading failure per study protocol
+    if 4764 in df['RID'].values:
+        df = df[df['RID'] != 4764]
+        print("Excluded RID 4764 (extraction/loading failure) per study protocol.")
+        
     print(f"Merged automated & manual ratings. N = {len(df)} matched subjects.")
     
     if len(df) == 0:
