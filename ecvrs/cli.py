@@ -255,13 +255,23 @@ def run_evaluate(args):
     hippo_col = 'Vol_Hippo_Total'
     if args.freesurfer_csv and os.path.exists(args.freesurfer_csv):
         try:
-            df_fs = pd.read_csv(args.freesurfer_csv)
+            print(f"Loading FreeSurfer data from: {args.freesurfer_csv}")
+            # Specify low_memory=False to prevent DtypeWarnings
+            df_fs = pd.read_csv(args.freesurfer_csv, low_memory=False)
+            
+            # Keep only the earliest scan for each RID based on EXAMDATE
+            if 'EXAMDATE' in df_fs.columns and 'RID' in df_fs.columns:
+                df_fs['EXAMDATE_dt'] = pd.to_datetime(df_fs['EXAMDATE'], errors='coerce')
+                df_fs = df_fs.sort_values(by='EXAMDATE_dt')
+                df_fs = df_fs.drop_duplicates(subset=['RID'], keep='first')
+                print(f"Filtered FreeSurfer data to baseline (earliest scan). N = {len(df_fs)} unique subjects.")
+                
             df_reg = pd.merge(df_reg, df_fs, on='RID', suffixes=('', '_fs'))
             # Example standard column name in UCSF FreeSurfer table for Left+Right Hippocampus
             if 'ST29SV' in df_reg.columns and 'ST88SV' in df_reg.columns: # ADNI standard Left and Right Hippo volume
                 df_reg['FS_Hippo_Total'] = df_reg['ST29SV'] + df_reg['ST88SV']
                 hippo_col = 'FS_Hippo_Total'
-                print("Successfully matched ADNI FreeSurfer Hippocampal volumes as Model 4 comparator.")
+                print(f"Successfully matched ADNI FreeSurfer Hippocampal volumes for N = {len(df_reg)} subjects in Model 4.")
         except Exception as e:
             print(f"Could not load/merge FreeSurfer CSV: {str(e)}. Falling back to Box Proxy volume.")
             
