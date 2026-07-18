@@ -41,3 +41,10 @@ MANIFEST
 *.njsproj
 *.sln
 *.swp
+
+# Working drafts / scratch documents — not for GitHub
+.hermes/
+JAD_*
+draft_*
+journal_recommendation_kr.md
+implementation_*

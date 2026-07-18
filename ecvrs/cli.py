@@ -16,7 +16,6 @@ from ecvrs.features.proxy_volume import extract_proxy_volumes
 from ecvrs.qc.checks import run_qc_checks
 from ecvrs.calibration.quantile import train_quantile_mapping, predict_quantile_mapping
 from ecvrs.calibration.ordinal import train_kappa_optimized_mapping, predict_kappa_optimized_mapping
-from ecvrs.calibration.linear_multi import train_linear_multi_mapping, predict_linear_multi_mapping
 from ecvrs.stats.agreement import cohen_kappa_quadratic, intraclass_correlation, bootstrap_confidence_intervals
 from ecvrs.stats.validate import verify_against_libraries
 from ecvrs.stats.regression import fit_ols, compare_models, fdr_correction
@@ -145,61 +144,27 @@ def run_evaluate(args):
     ]
     
     pred_cols = {}
-
-    # Whole-brain feature set for the multi-feature linear calibration (all image-derived,
-    # already present in the scores CSV). Each sub-scale is graded from a transparent linear
-    # combination of the same panel: the five regional CSF ratios, the five head-size-normalized
-    # proxy volumes, and the global ventricular fraction. Using whole-brain context to inform
-    # each regional grade mirrors how a radiologist reads a scan and improves agreement,
-    # while the model remains a fully interpretable weighted sum.
-    RATIO_COLS = ['Auto_Lt_Ratio', 'Auto_Rt_Ratio', 'Auto_Front_Ratio',
-                  'Auto_Parietal_Ratio', 'Auto_Temporal_Ratio']
-    VOL_COLS = ['Vol_Hippo_Lt', 'Vol_Hippo_Rt', 'Vol_Front', 'Vol_Parietal', 'Vol_Temporal']
-    if 'Vol_Ventricle' in df.columns and 'Vol_TBV' in df.columns:
-        df['vent_norm'] = df['Vol_Ventricle'] / df['Vol_TBV']
-    else:
-        df['vent_norm'] = 0.0
-
-    def build_features(ratio_col=None, manual_col=None):
-        cols = [df[c].values.astype(float) for c in RATIO_COLS]
-        tbv = df['Vol_TBV'].values.astype(float) if 'Vol_TBV' in df.columns else np.ones(n)
-        tbv = np.where(tbv == 0, 1.0, tbv)
-        for v in VOL_COLS:
-            cols.append(df[v].values.astype(float) / tbv)
-        cols.append(df['vent_norm'].values.astype(float))
-        return np.column_stack(cols)
-
-    use_linear = getattr(args, 'calibration', 'ordinal') == 'linear_multi'
-    feat_available = all(c in df.columns for c in RATIO_COLS + VOL_COLS + ['Vol_TBV'])
-    if use_linear and not feat_available:
-        print("Warning: linear_multi requested but proxy-volume features are missing; "
-              "falling back to ordinal calibration.")
-        use_linear = False
-
+    
     for ratio_col, manual_col, num_classes in lobes:
         preds = np.zeros(n, dtype=int)
         ratios = df[ratio_col].values
         manual = df[manual_col].values
-        features = build_features(ratio_col, manual_col) if use_linear else None
-
+        
         for k in range(5):
             test_idx = folds[k]
             train_idx = np.hstack([folds[j] for j in range(5) if j != k])
-
+            
             train_ratios = ratios[train_idx]
             train_manual = manual[train_idx]
             test_ratios = ratios[test_idx]
-
-            if use_linear:
-                model = train_linear_multi_mapping(features[train_idx], train_manual, num_classes)
-                preds[test_idx] = predict_linear_multi_mapping(features[test_idx], model)
-            elif args.calibration == 'ordinal':
+            
+            if args.calibration == 'ordinal':
                 thresh = train_kappa_optimized_mapping(train_ratios, train_manual, num_classes)
                 preds[test_idx] = predict_kappa_optimized_mapping(test_ratios, thresh, num_classes)
             else: # quantile baseline
                 thresh = train_quantile_mapping(train_ratios, train_manual, num_classes)
                 preds[test_idx] = predict_quantile_mapping(test_ratios, thresh, num_classes)
-
+                
         df[f'e_{manual_col}'] = preds
         
     # Compute sum scores
@@ -463,24 +428,24 @@ def main():
     p_extract.add_argument("--config", type=str, default="ecvrs/config/default.yaml", help="Configuration YAML path")
     p_extract.add_argument("--output_csv", type=str, default="e-CVRS_automated_scores.csv", help="Output path for scores CSV")
     p_extract.add_argument("--qc_csv", type=str, default="qc_report.csv", help="Output path for QC report CSV")
-
+    
     # evaluate parser
     p_evaluate = subparsers.add_parser("evaluate", help="Perform K-fold cross-validation and statistical evaluation")
     p_evaluate.add_argument("--scores_csv", type=str, default="e-CVRS_automated_scores.csv", help="Input automated scores CSV")
     p_evaluate.add_argument("--ratings_excel", type=str, default="ADNI_MRI_rating.xlsx", help="Input manual ratings Excel sheet")
     p_evaluate.add_argument("--freesurfer_csv", type=str, default=None, help="Optional ADNI FreeSurfer volumes CSV")
-    p_evaluate.add_argument("--calibration", type=str, choices=['quantile', 'ordinal', 'linear_multi'], default='ordinal', help="Threshold calibration mapping model ('linear_multi' = multi-feature linear + kappa thresholding)")
+    p_evaluate.add_argument("--calibration", type=str, choices=['quantile', 'ordinal'], default='ordinal', help="Threshold calibration mapping model")
     p_evaluate.add_argument("--seed", type=int, default=42, help="Random seed for K-fold splitting")
     p_evaluate.add_argument("--output_dir", type=str, default="results", help="Directory to save text report and plots")
-
+    
     # render parser
     p_render = subparsers.add_parser("render", help="Render overlay explanations for a single subject scan")
     p_render.add_argument("--scan", type=str, required=True, help="Path to raw Analyze header (.hdr) scan")
     p_render.add_argument("--config", type=str, default="ecvrs/config/default.yaml", help="Configuration YAML path")
     p_render.add_argument("--output_dir", type=str, default=".", help="Directory to save visual overlays")
-
+    
     args = parser.parse_args()
-
+    
     if args.command == "extract":
         run_extract(args)
     elif args.command == "evaluate":
