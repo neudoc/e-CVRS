@@ -177,7 +177,7 @@ e-CVRS는 뇌척수액 Aβ42와 유의하게 상관하였다(ρ=−0.284, p<0.00
 
 ### 4.1 주요 소견
 
-외부 신경영상 스위트 없이 일반 CPU에서 수 초 만에 돌아가는 설명가능한 자동 위축 척도 e-CVRS를 개발·검증하였다. 누출을 엄격히 막은 교차검증에서 전문가 판독과의 총점 일치도는 ICC 0.729였고, 부위별로는 측두·두정·해마가 substantial 또는 moderate, 전두가 moderate였다. e-CVRS는 여섯 인지검사 중 다섯(ADAS-Cog-13·기억·실행기능·언어·질병 중증도 CDR-SB)에 유의한 독립 정보를 보탰고, 실행기능에서는 연속 FreeSurfer 용적측정에 대등하거나 이를 넘어섰으며 아밀로이드 상관은 수기 판독을 초과하였다. 범위가 좁은 MMSE에서는 위축 신호가 모든 지표에서 감쇠하여 FreeSurfer만 가장 민감한 예측변수로 남았다.
+외부 신경영상 스위트 없이 일반 CPU에서 수 초 만에 돌아가는 설명가능한 자동 위축 척도 e-CVRS를 개발·검증하였다. 누출을 엄격히 막은 교차검증에서 전문가 판독과의 총점 일치도는 ICC 0.729였고, 부위별로는 측두·두정·해마가 substantial 또는 moderate, 전두가 moderate였다. e-CVRS는 여섯 인지검사 중 다섯(ADAS-Cog-13·기억·실행기능·언어·질병 중증도 CDR-SB)에 유의한 독립 정보를 보탰고, 실행기능에서는 연속 FreeSurfer 용적측정에 대등하거나 이를 넘어섰으며 아밀로이드 상관은 수기 판독을 초과하였다. 범위가 좁은 MMSE에서는 위축 신호가 모든 지표에서 감쇠하여 FreeSurfer만 가장 민감한 예측변수로 남았다. 인지 연관의 양상은 신경해부학적으로 일관되어 — e-CVRS가 실행기능에서 가장 정보적이고 기억·언어와도 일관되게 연관되며, 이들은 e-CVRS가 표본화하는 전두·내측측두·측두두정 피질이 담당하는 영역이다 — 단순한 전반적 중증도 신호를 넘어선 구성 타당도를 뒷받침한다.
 
 ### 4.2 왜 부위마다 일치도가 다른가
 
@@ -191,15 +191,19 @@ e-CVRS는 MMSE에서 유의 문턱에 조금 못 미쳤다(FDR p=0.067). 이는 
 
 FreeSurfer 부피는 범위가 좁은 MMSE에서도 유의성을 지켰다. 연속 복셀 수가 순서형 등급이 뭉개는 미세 분산을 보존하기 때문이며, 이 민감도는 분포가 눌린 상황에서 특히 결정적이다. 그 대신 e-CVRS는 FreeSurfer가 줄 수 없는 것을 준다 — 등급의 근거가 된 관상·축상 슬라이스, 관심영역 경계, 뇌척수액 마스크, 각 특징의 기여를 그대로 펼쳐 보여 임상의가 값을 직접 검증하게 한다 [14]. 분포가 넓은 결과변수에서는 두 방법이 접전이며, 실행기능에서는 e-CVRS의 증분(F=22.4)이 FreeSurfer(F=15.0)를 실제로 넘어서고 아밀로이드 상관에서도 수기 판독을 초과한다 — 이 모두를 순서형·완전 투명 점수로 이룬다. 이는 두 방법이 경쟁이 아니라 보완 관계임을 뒷받침한다 — 정밀한 연속값이 필요하면 FreeSurfer를, 빠르고 검증 가능한 판단이 필요하면 e-CVRS를 쓰면 된다.
 
-### 4.5 임상적 함의와 강점
+### 4.5 선행 자동화 방법과의 비교
 
-e-CVRS는 특수 서버나 GPU 없이 판독대 옆 일반 PC에서 즉시 돌아가므로, 자동 용적측정을 도입할 여력이 없는 병원에서도 위축 정량화를 시도할 수 있다. 결과가 오버레이로 제시되므로 전공의 교육에 특히 유용하며, 바쁜 판독 흐름에서 놓치기 쉬운 위축을 일관된 눈금으로 한 번 더 확인해 주는 '두 번째 눈' 역할을 할 수 있다. 방법론적 강점은 (i) 외부 스위트 없이 일반 CPU에서 수 초 내 작동, (ii) 무게중심 정렬의 스캐너 강건성, (iii) 여러 측정을 종합하면서도 유지되는 설명가능성, (iv) 누출 차단·부트스트랩 CI·사전 명세 다결과 회귀·FDR 통제·뇌척수액 정박을 갖춘 검증 엄밀성이다.
+판독자 변동성을 없애려는 시도는 대체로 두 갈래였다. 첫째는 판독자를 용적 분할로 대체하는 것으로, FreeSurfer [11]와 더 빠른 딥러닝 후속인 FastSurfer [12]·SynthSeg [13]는 정밀한 연속 부피를 주지만 상당한 계산량과 학습된 파이프라인을 요하고, 앞서 지적했듯 직접 들여다볼 수 있는 근거를 제공하지 못한다. 둘째는 시각척도 자체를 모델이 재현하도록 학습시키는 것으로, AVRA는 순환 합성곱 신경망으로 Scheltens 내측측두 등급 등을 모사했고 [27], 최근 연구는 딥러닝 분할에 자동 위축척도 채점·아형 분류를 결합했다 [28]. e-CVRS는 이들과 세 축에서 다르다. 분할도 정합도 필요 없고 영상 특징을 학습하지 않으며 단순 기하 규칙만으로 CPU에서 수 초 내 작동한다; 사후 saliency가 아니라 설계상 해석 가능하여 각 등급의 근거인 슬라이스·ROI 경계·CSF 마스크·특징 가중치를 그대로 드러낸다 [14]; 그리고 임의의 라벨이 아니라 임상적으로 검증된 확립된 척도(CVRS [1–3])를 자동화한다. 대가는 민감도로, 학습된 분할은 더 미세한 용적 분산을 포착하며 이는 본 연구의 FreeSurfer 비교에서 확인된다. 따라서 e-CVRS는 수기 판독과 고비용 자동화 사이의, 의도적으로 경량·투명한 자리를 차지한다.
 
-### 4.6 한계
+### 4.6 임상적 함의와 강점
+
+e-CVRS는 특수 서버나 GPU 없이 판독대 옆 일반 PC에서 즉시 돌아가므로, 자동 용적측정을 도입할 여력이 없는 병원에서도 위축 정량화를 시도할 수 있다. 스캔 한 건을 디스크에서 읽어 등급을 매기는 데 일반 노트북에서 수 초면 충분하다(부피 로딩 약 1.6초 + 1초 미만의 특징 추출). 결과가 오버레이로 제시되므로 전공의 교육에 특히 유용하며, 바쁜 판독 흐름에서 놓치기 쉬운 위축을 일관된 눈금으로 한 번 더 확인해 주는 '두 번째 눈' 역할을 할 수 있다; 각 등급이 온뇌 특징 패널을 쓰더라도 오버레이는 부위별 측정값과 고정된 모델 가중치를 그대로 보여 주므로, 판독자가 등급 부여 근거를 정확히 감사할 수 있다. 또한 e-CVRS는 그 수기형이 MCI에서 3년 내 치매 전환을 독립적으로 예측하는 CVRS를 자동화한 것이므로 [2,3], 이러한 예후 선별을 확장 가능하게 만들 수 있으며, 이는 아래 제안한 종단 재현을 직접적으로 뒷받침한다. 안전한 배치를 위해 파이프라인은 퇴화 사례(예: 무게중심이 영상 경계로 치우침)를 자동 플래그하는 품질관리를 내장하며, 본 코호트에서도 분석 전 손상·판독 불가 스캔 2건을 정확히 걸러냈다. 방법론적 강점은 (i) 외부 스위트 없이 일반 CPU에서 수 초 내 작동, (ii) 무게중심 정렬의 스캐너 강건성, (iii) 여러 측정을 종합하면서도 유지되는 설명가능성, (iv) 누출 차단·부트스트랩 CI·사전 명세 다결과 회귀·FDR 통제·뇌척수액 정박을 갖춘 검증 엄밀성이다.
+
+### 4.7 한계
 
 첫째, 단면 설계라 종단·전환 예측은 다루지 못했다. 둘째, ADNI MCI 단일 코호트로 외부 검증이 없고, 보고한 성능은 ADNI 내부 교차검증 추정치이므로 다기관·다장비 재현이 필요하다. 셋째, 각 부위 등급이 온뇌 특징 패널에서 산출되므로 — 실제 판독 방식을 본떠 일치도를 높이고 여전히 완전히 해석 가능한 가중합이지만 — 등급이 순수 국소 측정만이 아니라 전반적 맥락의 영향을 받는다. 이 패널의 일반화는 외부 자료에서 확인해야 한다. 넷째, 프록시 부피는 본 자료에서 모두 유효한 양수였으나(음수·결측 없음) 그 안정성 역시 외부 검증이 필요하다. 다섯째, 전두의 미만성 위축과 단일 슬라이스 규칙의 한계가 남는다. 여섯째, 기준 판독의 판독자 간 신뢰도 자료가 없어 기준 잡음을 완전히 분리하지 못했다.
 
-### 4.7 향후 과제
+### 4.8 향후 과제
 
 우선순위는 (1) 피질 ROI의 다중 슬라이스·부분용적 보정으로 특히 전두의 신호를 강화하고, (2) 백질 피크/z-score 강도 정규화로 스캐너 강건성을 높이며, (3) 순서형 로지스틱·등온회귀 보정과 중첩 교차검증을 도입하고, (4) 층화 K-fold와 인접 등급 병합으로 등급 불균형에 대응하며, (5) leave-one-site-out·자장강도 층화로 강건성을 검정하고, (6) 인지 분산이 회복된 전 스펙트럼(CN–MCI–AD)·외부 코호트에서 재현하며, (7) DICOM 입력·오버레이 리포트·API 서비스화를 통해 설명가능한 선별 도구로 발전시키는 것이다(의료기기가 아닌 연구용).
 
@@ -243,4 +247,26 @@ e-CVRS는 외부 의존 없이 일반 CPU에서 수 초 만에 뇌 위축을 정
 12. Henschel L, et al. FastSurfer: a fast and accurate deep learning based neuroimaging pipeline. Neuroimage 2020;219:117012.
 13. Billot B, et al. SynthSeg: segmentation of brain MRI scans of any contrast and resolution without retraining. Med Image Anal 2023;83:102789.
 14. Rudin C. Stop explaining black box machine learning models for high stakes decisions and use interpretable models instead. Nat Mach Intell 2019;1:206–15.
-15. Folstein MF, et al. "Mini
+15. Folstein MF, et al. "Mini-mental state": a practical method for grading the cognitive state of patients for the clinician. J Psychiatr Res 1975;12:189–98.
+16. Cohen J. Weighted kappa. Psychol Bull 1968;70:213–20.
+17. Landis JR, Koch GG. The measurement of observer agreement for categorical data. Biometrics 1977;33:159–74.
+18. Koo TK, Li MY. A guideline of selecting and reporting intraclass correlation coefficients for reliability research. J Chiropr Med 2016;15:155–63.
+19. Bland JM, Altman DG. Statistical methods for assessing agreement between two methods of clinical measurement. Lancet 1986;1:307–10.
+20. Benjamini Y, Hochberg Y. Controlling the false discovery rate. J R Stat Soc Series B 1995;57:289–300.
+21. Bossuyt PM, et al. STARD 2015. BMJ 2015;351:h5527.
+22. Collins GS, et al. Transparent reporting of a multivariable prediction model (TRIPOD). BMJ 2015;350:g7594.
+23. Wahlund LO, et al. A new rating scale for age-related white matter changes applicable to MRI and CT. Stroke 2001;32:1318–22.
+24. Crane PK, et al. Development and assessment of a composite score for memory in the ADNI (ADNI-Mem). Brain Imaging Behav 2012;6:502–16.
+25. Gibbons LE, et al. A composite score for executive functioning, validated in ADNI (ADNI-EF). Brain Imaging Behav 2012;6:517–27.
+26. Shaw LM, et al. Cerebrospinal fluid biomarker signature in ADNI subjects. Ann Neurol 2009;65:403–13.
+27. Mårtensson G, Ferreira D, Cavallin L, Muehlboeck JS, Wahlund LO, Wang C, et al. AVRA: automatic visual ratings of atrophy from MRI images using recurrent convolutional neural networks. Neuroimage Clin 2019;23:101872.
+28. Choe YS, Kim REY, Kim HW, Kim J, Lee H, Lee MK, et al. Automated scoring of Alzheimer's disease atrophy scale with subtype classification using deep learning-based T1-weighted MRI segmentation. J Alzheimers Dis Rep 2024;8:863–878.
+
+---
+
+## Figure Legends
+
+- **그림 1.** e-CVRS 파이프라인 개요 (무게중심 정렬 → ROI → CSF 비율·부피·뇌실 특징 → 선형 점수 → 등급, 오버레이로 검증 가능).
+- **그림 2.** e-CVRS와 전문가 판독의 부위별·총점 일치도(95% CI). 측두·해마에서 높고 전두에서 낮다.
+- **그림 3.** 여섯 인지검사에 대한 표준화 독립 연관 숲그림. e-CVRS 신호의 결과변수 의존성과 용적측정의 균일한 민감도를 보여 준다.
+- **그림 4.** 세 영상지표와 뇌척수액 Aβ42·p-tau 상관. 세 지표 모두 병리와 일관된 방향을 가리킨다.
