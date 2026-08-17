@@ -1,0 +1,59 @@
+# ===== ADNI Data Use Agreement compliance: never commit data =====
+*.hdr
+*.img
+*.nii
+*.nii.gz
+*.xlsx
+*.xls
+*.csv
+qc_report.csv
+e-CVRS_automated_scores.csv
+
+# ===== Private / personal documents =====
+IRB_doc/
+research_protocol.*
+data_summary.md
+CVRS_Table.pdf
+CVRS_article.pdf
+*.docx
+*.pdf
+!figures/*.png
+
+# ===== Manuscript & internal outputs =====
+JAD_*
+draft_*
+outputs/
+outputs_ver2/
+outputs_ver3/
+outputs_tmp_*.py
+journal_recommendation_kr.md
+implementation_*
+analysis_out/
+results/
+case_out/
+
+# ===== Scratch & temporary files =====
+*.jpg
+*.jpeg
+*.tmp
+.~lock.*
+~$*
+_to_delete/
+src/
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# ===== IDE / OS =====
+.idea/
+.vscode/
+.hermes/
+*.swp
+Thumbs.db
+.DS_Store

@@ -1,0 +1,18 @@
+seed: 42
+mta:
+  dy_offset: -12
+  dz_offset: -12
+  dx_offset: 28
+  tf: 0.25
+frontal:
+  dz_offset: 20
+  dy_offset: 10
+  tf: 0.30
+parietal:
+  dz_offset: 35
+  dy_offset: -10
+  tf: 0.20
+temporal:
+  dz_offset: -5
+  dx_offset: 35
+  tf: 0.30
