@@ -18,6 +18,7 @@ from ecvrs.calibration.quantile import train_quantile_mapping, predict_quantile_
 from ecvrs.calibration.ordinal import train_kappa_optimized_mapping, predict_kappa_optimized_mapping
 from ecvrs.calibration.linear_multi import train_linear_multi_mapping, predict_linear_multi_mapping
 from ecvrs.calibration.adaptive_ridge import train_adaptive_ridge_mapping, predict_adaptive_ridge_mapping
+from ecvrs.calibration.quadratic_ridge import train_quadratic_ridge_mapping, predict_quadratic_ridge_mapping
 from ecvrs.stats.agreement import cohen_kappa_quadratic, intraclass_correlation, bootstrap_confidence_intervals
 from ecvrs.stats.validate import verify_against_libraries
 from ecvrs.stats.regression import fit_ols, compare_models, fdr_correction
@@ -61,7 +62,7 @@ def run_extract(args):
             ratios, r_meta = extract_features(data, x_com, y_com, z_com, spacing, i98, cfg)
             
             # 4. Proxy 3D Volumes
-            volumes = extract_proxy_volumes(data, x_com, y_com, z_com, spacing, i98)
+            volumes = extract_proxy_volumes(data, x_com, y_com, z_com, spacing, i98, cfg)
             
             # 5. Run QC Validation Checks
             shape = data.shape
@@ -167,9 +168,9 @@ def run_evaluate(args):
         cols.append(df['vent_norm'].values.astype(float))
         return np.column_stack(cols)
 
-    calibration = getattr(args, 'calibration', 'adaptive_ridge')
-    # Both multi-feature calibrations need the whole-brain feature panel.
-    needs_panel = calibration in ('linear_multi', 'adaptive_ridge')
+    calibration = getattr(args, 'calibration', 'quadratic_ridge')
+    # The multi-feature calibrations all need the whole-brain feature panel.
+    needs_panel = calibration in ('linear_multi', 'adaptive_ridge', 'quadratic_ridge')
     feat_available = all(c in df.columns for c in RATIO_COLS + VOL_COLS + ['Vol_TBV'])
     if needs_panel and not feat_available:
         print(f"Warning: {calibration} requested but proxy-volume features are missing; "
@@ -194,8 +195,16 @@ def run_evaluate(args):
             train_manual = manual[train_idx]
             test_ratios = ratios[test_idx]
 
-            if calibration == 'adaptive_ridge':
-                # v3 (published) calibration: nested inner CV picks the feature design
+            if calibration == 'quadratic_ridge':
+                # Published calibration: explicit quadratic basis [x, x^2] with a
+                # ridge penalty chosen by inner CV inside the training fold.
+                model = train_quadratic_ridge_mapping(
+                    features[train_idx], train_manual, num_classes, seed=args.seed)
+                preds[test_idx] = predict_quadratic_ridge_mapping(features[test_idx], model)
+                selected_models.setdefault(manual_col, []).append(
+                    (model['variant'], model['lam']))
+            elif calibration == 'adaptive_ridge':
+                # Runner-up calibration: nested inner CV picks the feature design
                 # (linear vs quadratic) and the ridge penalty inside the training fold.
                 model = train_adaptive_ridge_mapping(
                     features[train_idx], train_manual, num_classes, seed=args.seed)
@@ -215,7 +224,7 @@ def run_evaluate(args):
         df[f'e_{manual_col}'] = preds
         
     if selected_models:
-        print("\nAdaptive calibration selections (design, lambda) per outer fold:")
+        print("\nCalibration selections (design, lambda) per outer fold:")
         for region, choices in selected_models.items():
             designs = [c[0] for c in choices]
             print(f"  {region:<12} linear {designs.count('linear')}/5, "
@@ -360,7 +369,7 @@ def run_evaluate(args):
     report_path = os.path.join(args.output_dir, "evaluation_report.txt")
     with open(report_path, 'w', encoding='utf-8') as ro:
         ro.write("=========================================\n")
-        ro.write("e-CVRS PIPELINE STATISTICAL REPORT (v3.0)\n")
+        ro.write("e-CVRS PIPELINE STATISTICAL REPORT\n")
         ro.write("=========================================\n\n")
         ro.write(f"Total Cohort Size: {len(df)}\n")
         ro.write(f"Clean Covariates Cohort Size: {len(df_reg)}\n")
@@ -474,7 +483,7 @@ def run_render(args):
     print(f"Overlay summary successfully generated and saved to {os.path.join(args.output_dir, 'overlays', f'{rid}_summary.png')}")
 
 def main():
-    parser = argparse.ArgumentParser(description="e-CVRS Automated Visual Rating Pipeline CLI (v3.0)")
+    parser = argparse.ArgumentParser(description="e-CVRS Automated Visual Rating Pipeline CLI")
     subparsers = parser.add_subparsers(dest="command", required=True, help="Sub-commands")
     
     # extract parser
@@ -490,13 +499,16 @@ def main():
     p_evaluate.add_argument("--ratings_excel", type=str, default="ADNI_MRI_rating.xlsx", help="Input manual ratings Excel sheet")
     p_evaluate.add_argument("--freesurfer_csv", type=str, default=None, help="Optional ADNI FreeSurfer volumes CSV")
     p_evaluate.add_argument("--calibration", type=str,
-                            choices=['quantile', 'ordinal', 'linear_multi', 'adaptive_ridge'],
-                            default='adaptive_ridge',
-                            help="Calibration model. 'adaptive_ridge' (default) is the published v3 "
-                                 "method: nested inner CV selects a linear or quadratic design and a "
-                                 "ridge penalty inside each training fold, followed by kappa-optimized "
-                                 "ordinal thresholds. 'linear_multi' is the v2 multi-feature OLS; "
-                                 "'ordinal' and 'quantile' are single-ratio baselines.")
+                            choices=['quantile', 'ordinal', 'linear_multi',
+                                     'adaptive_ridge', 'quadratic_ridge'],
+                            default='quadratic_ridge',
+                            help="Calibration model. 'quadratic_ridge' (default) is the published "
+                                 "method: an explicit quadratic basis [x, x^2] with a ridge penalty "
+                                 "chosen by inner CV inside each training fold, followed by "
+                                 "kappa-optimized ordinal thresholds. 'adaptive_ridge' additionally "
+                                 "selects linear vs quadratic per region; 'linear_multi' is "
+                                 "multi-feature OLS; 'ordinal' and 'quantile' are single-ratio "
+                                 "baselines.")
     p_evaluate.add_argument("--seed", type=int, default=42, help="Random seed for K-fold splitting")
     p_evaluate.add_argument("--output_dir", type=str, default="results", help="Directory to save text report and plots")
 

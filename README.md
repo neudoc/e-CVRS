@@ -1,26 +1,40 @@
-# e-CVRS: Explainable Automated Visual Rating of Brain Atrophy on MRI in Mild Cognitive Impairment 
+# e-CVRS: Explainable Automated Visual Rating of Brain Atrophy on MRI in Mild Cognitive Impairment
 
 e-CVRS is a lightweight, pure-Python pipeline that automates the atrophy component of the Comprehensive Visual Rating Scale (CVRS) on 3D T1-weighted MRI — **without FSL, ANTs, FreeSurfer, registration, or segmentation**.
 
-It anchors regions of interest on the anatomical **center of mass (COM)** of the head, extracts local CSF-to-tissue ratios and proxy volumes, and converts them into the familiar CVRS ordinal grades (total 0–17). Every grade ships with a **visual explanation** showing the exact slice, ROI boundaries, and segmented CSF mask that produced it.
+It anchors regions of interest on the anatomical **center of mass (COM)** of the head, extracts local CSF-to-tissue ratios and proxy volumes, and converts them into the familiar CVRS ordinal grades (total 0–17). Every grade ships with a **visual explanation** showing the exact slice, window boundaries, and segmented CSF mask that produced it.
 
 Processing takes seconds per scan on a standard CPU.
 
 ---
 
-## Published results (v3, adaptive calibration)
+## Published results
 
 Validated in **339 ADNI participants with mild cognitive impairment**, with all model fitting inside training folds and every statistic computed out-of-fold:
 
 | Domain | Reference standard | Result |
 | :--- | :--- | :--- |
-| Scale fidelity | Blinded expert CVRS ratings | **ICC(2,1) = 0.747** (95% CI 0.694–0.788); regional κw 0.470–0.652; within ±1 grade 90–96% |
-| Structural | FreeSurfer v7 hippocampal volume | ρ = 0.384 (manual CVRS: 0.472) |
-| Clinical | 6 cognitive outcomes, covariate-adjusted | Significant for **all six** after BH correction (incremental F = 4.2–19.4) |
-| Biological | CSF Aβ42 | ρ = −0.286 (manual CVRS: −0.231) |
-| Stability | 8 fold-assignment seeds | Total ICC 0.745 ± 0.006 |
+| Scale fidelity | Blinded expert CVRS ratings | **ICC(2,1) = 0.748** (95% CI 0.696–0.793); regional κw 0.498–0.666; within ±1 grade 90–99% |
+| Structural | FreeSurfer v7 hippocampal volume | ρ = 0.416 (manual CVRS: 0.472) |
+| Clinical | 6 cognitive outcomes, covariate-adjusted | Significant for **all six** after BH correction (incremental F = 5.7–24.7), with the **largest executive-function increment of the three imaging measures compared** |
+| Biological | CSF Aβ42 | ρ = −0.282, **stronger than the expert reading** (−0.231) |
+| Stability | 8 fold-assignment seeds | Total ICC 0.734 ± 0.011 (range 0.719–0.748) |
 
 The calibration algorithm was selected by a **prespecified equal-weight composite** of the three external domains (structural, clinical, biological), computed strictly on held-out predictions — not by agreement with any single reference standard.
+
+---
+
+## Where the medial temporal grades come from
+
+The defining design choice is that the medial temporal grades are computed from **windows anchored on the hippocampal region**, i.e. on the anatomy the MTA scale actually describes.
+
+For each hemisphere the CSF ratio is measured in a **medial band 14–34 mm lateral to the midline and 25 mm tall, centered 18 mm below the COM plane** — directly over the temporal horn, choroid fissure, and parahippocampal CSF spaces whose widening constitutes the Scheltens grade. The ratio is **averaged over 31 contiguous coronal slices**, spanning `y_com − 5 mm` (hippocampal tail) to `y_com + 25 mm` (head), so no single-slice placement error can dominate the measurement. Window placement was verified against hippocampal anatomy by a neurologist across the atrophy range.
+
+The same along-axis averaging is applied to every window in the pipeline: each **lobar CSF ratio is averaged over 11 contiguous axial slices** rather than read from a single plane.
+
+That the window measures the intended anatomy is testable, and it tests out: the **raw, uncalibrated** medial temporal CSF ratio correlates with FreeSurfer hippocampal volume at ρ = 0.413 (left) and 0.358 (right) — the left band alone matching the fully calibrated total score.
+
+A **tilted** variant whose vertical center follows the hippocampal long axis (12 mm below the COM plane at the tail to 20 mm at the head) was evaluated under the identical protocol. It improved the raw feature–grade correlation (ρ = 0.46 vs 0.43) but won no external validity domain, and the simpler fixed-height window was retained by the prespecified rule.
 
 ---
 
@@ -28,22 +42,34 @@ The calibration algorithm was selected by a **prespecified equal-weight composit
 
 Each of the five regional grades is predicted from an 11-feature panel — five regional CSF ratios, five proxy volumes normalized by total brain volume, and the global ventricular fraction — in two transparent stages:
 
-1. **Adaptive penalized regression.** A nested four-fold inner cross-validation, run inside each outer training fold, selects *per region* whether feature effects are **linear** (`x`) or **quadratic** (`[x, x²]`), and picks an **L2 ridge penalty** λ ∈ {0, 0.01, 0.1, 1, 10, 100}. The selected model is refit on the full outer training fold.
+1. **Quadratic-basis ridge regression.** The panel is expanded into an explicit quadratic basis `[x, x²]` and fitted by ridge regression, with the penalty λ ∈ {0, 0.01, 0.1, 1, 10, 100} selected by four-fold inner cross-validation run inside each outer training fold.
 2. **Ordinal thresholding.** Grade cutoffs maximizing quadratic-weighted kappa are learned from the same training fold and applied unchanged to held-out data.
 
 No latent image representation is learned. The output is an explicit weighted sum of named, inspectable measurements plus explicit thresholds.
 
-**The selection itself is an interpretable result.** Across the 40 outer training folds of the published analysis (8 seeds × 5 folds):
+### How the calibration was chosen
 
-| Region | Linear selected | Quadratic selected |
-| :--- | ---: | ---: |
-| Left hippocampus MTA | 40 / 40 | 0 / 40 |
-| Right hippocampus MTA | 30 / 40 | 10 / 40 |
-| Frontal | 1 / 40 | 39 / 40 |
-| Parietal | 1 / 40 | 39 / 40 |
-| Temporal | 4 / 40 | 36 / 40 |
+Five transparent candidates were compared across 8 fold-assignment seeds and ranked by the equal-weight composite of the three external domains (lower rank = better):
 
-Hippocampal grading is dominated by a focal, near-linear CSF signal in the choroid fissure; diffuse cortical atrophy accumulates non-linearly across sulci and is better fit by curved effects.
+| Candidate | ICC | FreeSurfer ρ | Mean cognitive F | Mean \|ρ\| CSF | **Composite rank** |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| **`quadratic_ridge`** (published) | 0.734 | 0.405 | 15.65 | 0.167 | **1.67** |
+| `adaptive_ridge` | 0.729 | 0.403 | 15.61 | 0.164 | 2.29 |
+| linear ridge | 0.704 | 0.369 | 15.15 | 0.160 | 3.08 |
+| linear OLS | 0.702 | 0.366 | 14.77 | 0.162 | 3.38 |
+| rank-transformed OLS | 0.705 | 0.352 | 13.72 | 0.150 | 4.58 |
+
+**The selected penalties are themselves an interpretable result.** Across the 40 outer training folds (8 seeds × 5 folds), moderate shrinkage predominated, with markedly stronger shrinkage for the medial temporal grades:
+
+| Region | λ=0.01 | λ=0.1 | λ=1 | λ=10 | λ=100 |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| Left hippocampus MTA | 0 | 1 | 19 | 13 | 7 |
+| Right hippocampus MTA | 1 | 5 | 10 | 9 | 15 |
+| Frontal | 0 | 2 | 30 | 7 | 1 |
+| Parietal | 0 | 15 | 24 | 1 | 0 |
+| Temporal | 1 | 8 | 29 | 1 | 1 |
+
+The cortical grades settle on λ=1 as the modal choice; the medial temporal grades, whose focal CSF signal is measured against a highly collinear whole-brain panel, are pushed toward much heavier regularization.
 
 ---
 
@@ -65,7 +91,7 @@ Reproduce the published analysis end-to-end with one command:
 ./reproduce.sh /path/to/adni/scans
 ```
 
-Or run the two stages separately:
+Or run the stages separately:
 
 **1. Extract transparent features from MRI**
 
@@ -76,7 +102,7 @@ python -m ecvrs.cli extract \
   --qc_csv qc_report.csv
 ```
 
-**2. Calibrate and validate** (the default `adaptive_ridge` is the published method)
+**2. Calibrate and validate** (the default `quadratic_ridge` is the published method)
 
 ```bash
 python -m ecvrs.cli evaluate \
@@ -90,21 +116,14 @@ python -m ecvrs.cli evaluate \
 Expected output:
 
 ```
-Calibration method: adaptive_ridge
+Calibration method: quadratic_ridge
 
-Adaptive calibration selections (design, lambda) per outer fold:
-  Hippo_Lt     linear 5/5, quadratic 0/5, lambda [10.0, 10.0, 10.0, 10.0, 10.0]
-  Hippo_Rt     linear 4/5, quadratic 1/5, lambda [10.0, 10.0, 10.0, 10.0, 10.0]
-  Front        linear 0/5, quadratic 5/5, lambda [1.0, 1.0, 10.0, 10.0, 1.0]
-  Parietal     linear 0/5, quadratic 5/5, lambda [1.0, 0.1, 1.0, 1.0, 1.0]
-  Temporal     linear 0/5, quadratic 5/5, lambda [1.0, 1.0, 1.0, 1.0, 1.0]
-
-Hippo_Lt     Weighted Kappa: 0.6000 [95% CI: 0.5272 - 0.6616]
-Hippo_Rt     Weighted Kappa: 0.6219 [95% CI: 0.5592 - 0.6767]
-Front        Weighted Kappa: 0.4698 [95% CI: 0.3759 - 0.5539]
-Parietal     Weighted Kappa: 0.6312 [95% CI: 0.5584 - 0.6932]
-Temporal     Weighted Kappa: 0.6524 [95% CI: 0.5871 - 0.7128]
-Total Sum    ICC(2,1):       0.7467 [95% CI: 0.6942 - 0.7884]
+Hippo_Lt     Weighted Kappa: 0.5987 [95% CI: 0.5285 - 0.6620]
+Hippo_Rt     Weighted Kappa: 0.6225 [95% CI: 0.5541 - 0.6801]
+Front        Weighted Kappa: 0.4981 [95% CI: 0.4099 - 0.5757]
+Parietal     Weighted Kappa: 0.5944 [95% CI: 0.5152 - 0.6620]
+Temporal     Weighted Kappa: 0.6655 [95% CI: 0.6061 - 0.7212]
+Total Sum    ICC(2,1):       0.7482 [95% CI: 0.6961 - 0.7930]
 ```
 
 **3. Render the explanatory overlay for one subject**
@@ -115,30 +134,45 @@ python -m ecvrs.cli render --scan /path/to/subject.hdr --output_dir case_out
 
 ---
 
+## Window geometry
+
+All offsets are **physical millimetres** from the head center of mass, so they transfer across voxel sizes without registration. Orientation convention is LAS (`+x` = right, `+y` = anterior, `+z` = superior), as delivered by ADNI Analyze 7.5.
+
+| Window | Placement | Threshold | Sampling |
+| :--- | :--- | :--- | :--- |
+| Medial temporal (L/R) | 14–34 mm lateral; 25 mm tall; center `z_com − 18 mm` | 0.25·I₉₈ | mean over 31 coronal slices, `y_com − 5` → `+25 mm` |
+| MT volume proxy | ±24 mm lateral (35 mm wide); 20 mm deep at `y_com + 10 mm`; same depth/height | 0.25–0.95·I₉₈ | 3D box |
+| Frontal | `z_com + 20 mm`, anterior | 0.30·I₉₈ | mean over 11 axial slices |
+| Parietal | `z_com + 35 mm`, posterior | 0.20·I₉₈ | mean over 11 axial slices |
+| Temporal | `z_com − 5 mm`, bilateral lateral bands | 0.30·I₉₈ | mean over 11 axial slices |
+
+Every value lives in [`ecvrs/config/default.yaml`](ecvrs/config/default.yaml) and can be changed without touching code.
+
+---
+
 ## Calibration methods
 
 `--calibration` selects the mapping from features to ordinal grades:
 
 | Value | Method |
 | :--- | :--- |
-| `adaptive_ridge` | **Default; the published v3 method.** Nested inner CV selects linear vs. quadratic design and ridge penalty per region. |
-| `linear_multi` | v2. Multi-feature ordinary least squares on the same 11-feature panel. |
+| `quadratic_ridge` | **Default; the published method.** Explicit quadratic basis `[x, x²]` with a ridge penalty chosen by inner CV. |
+| `adaptive_ridge` | Additionally selects linear vs. quadratic design per region by nested inner CV. Runner-up in the benchmark. |
+| `linear_multi` | Multi-feature ordinary least squares on the same 11-feature panel. |
 | `ordinal` | Baseline. Single local CSF ratio, kappa-optimized thresholds. |
 | `quantile` | Baseline. Single ratio, cumulative-distribution matching. |
 
-All four are leakage-controlled: thresholds and weights are learned only inside training folds.
+All are leakage-controlled: thresholds and weights are learned only inside training folds.
 
 ---
 
 ## Tests
 
 ```bash
-python tests/test_adaptive_ridge.py
+python tests/test_calibration.py
 ```
 
-Test 1 runs anywhere and verifies that the inner selector recovers a known feature design and applies shrinkage under collinearity. Test 2 reproduces the published agreement statistics exactly, and is skipped automatically when the ADNI-derived inputs are absent.
-
-The `analysis/` scripts reproduce every main-text and supplementary table and figure. Set `ECVRS_DATA_DIR` to the folder holding the ADNI-derived inputs and run, in order: `merge_cohort.py`, `benchmark.py`, `final_analysis.py`, then the supplementary scripts (`grade_fs_analysis.py`, `mta_cognitive_analysis.py` and the two figure scripts).
+Test 1 runs anywhere and verifies that the penalty selector shrinks under collinearity, that the quadratic design is the literal basis `[x, x²]`, and that a trained model exposes its coefficients and cutoffs as plain arrays. Test 2 reproduces the published agreement statistics exactly, and is skipped automatically when the ADNI-derived inputs are absent.
 
 ---
 
@@ -147,43 +181,41 @@ The `analysis/` scripts reproduce every main-text and supplementary table and fi
 ```
 ecvrs/
 ├── config/
-│   └── default.yaml          # ROI offsets, CSF threshold factors, seed
+│   └── default.yaml          # window geometry, CSF threshold factors, seed
 ├── io/
 │   └── readers.py            # MRI loading and orientation handling
 ├── preprocess/
-│   └── com.py                # Center-of-mass calculation with neck clipping
+│   └── com.py                # center-of-mass calculation with neck clipping
 ├── features/
-│   ├── csf_ratio.py          # Bounding-box crop and local CSF ratio extraction
+│   ├── csf_ratio.py          # hippocampus-anchored + lobar multi-slice CSF ratios
 │   └── proxy_volume.py       # 3D bounding-box tissue volume proxies
 ├── calibration/
-│   ├── adaptive_ridge.py     # v3 (published): nested linear/quadratic ridge
-│   ├── linear_multi.py       # v2: multi-feature OLS
-│   ├── ordinal.py            # Kappa-optimized threshold search
-│   └── quantile.py           # Cumulative distribution matching
+│   ├── quadratic_ridge.py    # published: explicit [x, x²] basis + ridge
+│   ├── adaptive_ridge.py     # runner-up: nested linear/quadratic selection
+│   ├── linear_multi.py       # multi-feature OLS
+│   ├── ordinal.py            # kappa-optimized threshold search
+│   └── quantile.py           # cumulative distribution matching
 ├── stats/
-│   ├── agreement.py          # Quadratic-weighted kappa, ICC(2,1), bootstrap CIs
+│   ├── agreement.py          # quadratic-weighted kappa, ICC(2,1), bootstrap CIs
 │   ├── regression.py         # OLS, nested F-tests, Benjamini–Hochberg
-│   └── validate.py           # Cross-verification against scikit-learn / pingouin
+│   └── validate.py           # cross-verification against scikit-learn / pingouin
 ├── viz/
-│   └── overlays.py           # Explanatory annotated slice overlays (PNG)
+│   └── overlays.py           # explanatory annotated slice overlays (PNG)
 ├── qc/
-│   └── checks.py             # Dimension checks and out-of-bounds ROI flags
-└── cli.py                    # Command-line entry point
+│   └── checks.py             # dimension checks and out-of-bounds window flags
+└── cli.py                    # command-line entry point
 analysis/
-├── merge_cohort.py           # Build the 339-subject multi-domain cohort
-├── benchmark.py              # Candidate-algorithm benchmark (writes out-of-fold grades)
-├── benchmark2.py             # Additional candidates
-├── final_analysis.py         # Main-text tables (agreement, FS, cognition, CSF)
-├── make_figures.py           # Main-text Figures 1-4
-├── grade_fs_analysis.py      # Supplementary S5-S6: MTA grades vs FreeSurfer volumes
-├── grade_fs_figure.py        # Supplementary Figure S1
-├── mta_cognitive_analysis.py # Supplementary S7: bilateral MTA grades vs cognition
-└── mta_cognitive_figure.py   # Supplementary Figure S2
+├── merge_cohort.py           # build the 339-subject multi-domain cohort
+├── benchmark.py              # 5-candidate benchmark + prespecified composite ranking
+├── final_analysis.py         # main-text Tables 1–5
+└── make_figures.py           # main-text Figures 1–4
 tests/
-└── test_adaptive_ridge.py    # Selector self-check + published-result reproduction
-reproduce.sh                  # One-command end-to-end reproduction
-requirements.txt              # Locked environment
+└── test_calibration.py       # selector self-check + published-result reproduction
+reproduce.sh                  # one-command end-to-end reproduction
+requirements.txt              # locked environment
 ```
+
+The `analysis/` scripts read their inputs from `ECVRS_DATA_DIR` and write to `ECVRS_OUT_DIR` (figures to `ECVRS_FIG_DIR`), so they run from a clone without editing code. Run them in order: `merge_cohort.py`, `benchmark.py`, `final_analysis.py`, `make_figures.py`.
 
 ---
 
@@ -191,20 +223,20 @@ requirements.txt              # Locked environment
 
 ```python
 import numpy as np
-from ecvrs.calibration.adaptive_ridge import (
-    train_adaptive_ridge_mapping, predict_adaptive_ridge_mapping)
+from ecvrs.calibration.quadratic_ridge import (
+    train_quadratic_ridge_mapping, predict_quadratic_ridge_mapping)
 
 # X_train: (n, 11) feature panel; y_train: manual grades; 5 classes for hippocampal MTA
-model = train_adaptive_ridge_mapping(X_train, y_train, num_classes=5, seed=42)
+model = train_quadratic_ridge_mapping(X_train, y_train, num_classes=5, seed=42)
 
-print(model["variant"], model["lam"])      # e.g. 'linear' 10.0
-print(model["beta"])                       # explicit standardized coefficients
+print(model["lam"])                        # ridge penalty chosen by inner CV
+print(model["beta"])                       # 22 explicit standardized coefficients [x, x²]
 print(model["thresholds"])                 # explicit grade cutoffs
 
-grades = predict_adaptive_ridge_mapping(X_test, model)
+grades = predict_quadratic_ridge_mapping(X_test, model)
 ```
 
-`train_adaptive_ridge_mapping` must be called on training data only. `model` is a plain dict of named arrays and can be serialized, inspected, and audited.
+`train_quadratic_ridge_mapping` must be called on training data only. `model` is a plain dict of named arrays and can be serialized, inspected, and audited.
 
 ---
 
@@ -228,9 +260,18 @@ Ethics: this secondary analysis of de-identified public data was granted an exem
 
 ---
 
+## Version history
+
+- **Current (hippocampus-anchored).** Medial temporal windows placed on the hippocampal region and averaged over 31 coronal slices; lobar windows averaged over 11 axial slices; `quadratic_ridge` calibration. This is the version described in the manuscript under review.
+- **`v3-peri-sylvian` (tag).** An earlier development version whose medial temporal window sat at `z_com − 12 mm`, at peri-Sylvian/insular rather than hippocampal level, calibrated with `adaptive_ridge`. Preserved as a git tag for the development record only; **it is not the submitted analysis** and its reported numbers differ.
+
+---
+
 ## Limitations
 
 - Validated cross-sectionally in a single ADNI MCI cohort scanned at 3T on a harmonized protocol; **external multi-site validation is pending**.
 - The COM anchoring tolerates translation but does **not** correct head rotation.
-- The neck cutoff is expressed in axial slices (130) rather than physical millimeters; revise for heterogeneous acquisitions.
-- e-CVRS tracks CSF Aβ42 but did not reproduce the p-tau181 association shown by volumetry, indicating a sensitivity ceiling of the current fixed-ROI features.
+- Because the hippocampal tail ascends posteriorly, at the most posterior levels of the averaging range the fixed-height window samples adjacent parahippocampal and peritrigonal medial temporal CSF — consistent with the medial temporal, rather than hippocampus-exclusive, construct of the MTA grade.
+- The neck cutoff is expressed in axial slices (130) rather than physical millimetres; revise for heterogeneous acquisitions.
+- The lobar slice count is fixed at 11 slices, which corresponds to ±5 mm only at the 1.0–1.05 mm slice spacing of the analyzed data; rescale for markedly thicker slices.
+- e-CVRS tracks CSF Aβ42 but did not reproduce the p-tau181 association shown by volumetry, indicating a sensitivity ceiling of the current fixed-window features.

@@ -1,10 +1,10 @@
-"""
-Self-checks for the v3 adaptive ridge calibration.
+"""Self-checks for the published e-CVRS calibration.
 
-Run with:  python tests/test_adaptive_ridge.py
+Run with:  python tests/test_calibration.py
 
-Test 1 always runs and needs no data: it verifies that the inner selector
-recovers the correct feature design on synthetic data with known structure.
+Test 1 always runs and needs no data: it verifies that the ridge penalty
+selector behaves correctly on synthetic data with known structure, and that a
+trained model is a plain, inspectable dictionary.
 
 Test 2 runs only if the ADNI-derived inputs are present in the working
 directory (they cannot be redistributed under the ADNI Data Use Agreement).
@@ -17,49 +17,67 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from ecvrs.calibration.adaptive_ridge import (  # noqa: E402
-    select_model,
-    train_adaptive_ridge_mapping,
-    predict_adaptive_ridge_mapping,
+from ecvrs.calibration.quadratic_ridge import (  # noqa: E402
+    select_lambda,
+    quadratic_design,
+    train_quadratic_ridge_mapping,
+    predict_quadratic_ridge_mapping,
 )
 
-# Published values (ADNI MCI, N=339, five-fold outer CV, seed 42).
+# Published values (ADNI MCI, N=339, five-fold outer CV, seed 42,
+# hippocampus-anchored windows, full_quadratic_ridge calibration).
 PUBLISHED = {
-    "icc_total": 0.7467,
+    "icc_total": 0.7482,
     "kappa": {
-        "Hippo_Lt": 0.6000,
-        "Hippo_Rt": 0.6219,
-        "Front": 0.4698,
-        "Parietal": 0.6312,
-        "Temporal": 0.6524,
+        "Hippo_Lt": 0.5987,
+        "Hippo_Rt": 0.6225,
+        "Front": 0.4981,
+        "Parietal": 0.5944,
+        "Temporal": 0.6655,
     },
-    "icc_mean_8_seeds": 0.7452,
+    "icc_mean_8_seeds": 0.7341,
 }
+
+LOBES = [("Hippo_Lt", 5), ("Hippo_Rt", 5), ("Front", 4), ("Parietal", 4), ("Temporal", 4)]
 SEEDS = [0, 1, 2, 3, 4, 42, 100, 2024]
-LOBES = [("Hippo_Lt", 5), ("Hippo_Rt", 5), ("Front", 4),
-         ("Parietal", 4), ("Temporal", 4)]
 
 
-def test_design_selection_recovers_known_structure():
-    """A curved generating function should pull the selector to 'quadratic'."""
+def test_penalty_selection_and_model_transparency():
     rng = np.random.RandomState(0)
+
+    # Well-conditioned, near-noiseless signal: little shrinkage is needed.
     X = rng.normal(size=(400, 4))
+    y = X @ np.array([1.0, -0.5, 0.25, 0.0]) + 0.01 * rng.normal(size=400)
+    lam_clean = select_lambda(X, y, seed=0)
 
-    y_lin = 2.0 * X[:, 0] - 1.0 * X[:, 1] + rng.normal(scale=0.1, size=400)
-    variant, _ = select_model(X, y_lin, seed=42)
-    assert variant == "linear", f"expected linear, got {variant}"
+    # Same signal with heavily collinear duplicate columns: ridge must shrink more.
+    Xc = np.hstack([X, X + 1e-3 * rng.normal(size=X.shape)])
+    lam_collinear = select_lambda(Xc, y, seed=0)
+    assert lam_collinear >= lam_clean, (
+        f"expected at least as much shrinkage under collinearity, "
+        f"got {lam_collinear} vs {lam_clean}"
+    )
+    print(f"PASS  penalty selection: lambda {lam_clean} (clean) -> "
+          f"{lam_collinear} (collinear)")
 
-    y_quad = 3.0 * X[:, 0] ** 2 + rng.normal(scale=0.1, size=400)
-    variant, _ = select_model(X, y_quad, seed=42)
-    assert variant == "quadratic", f"expected quadratic, got {variant}"
+    # The quadratic basis is explicit: [x, x^2], nothing latent.
+    D = quadratic_design(X)
+    assert D.shape == (400, 8)
+    assert np.allclose(D[:, :4], X)
+    assert np.allclose(D[:, 4:], X ** 2)
+    print("PASS  quadratic design is the explicit basis [x, x^2]")
 
-    # Heavy noise and near-collinear features should attract a non-zero penalty.
-    Xc = np.column_stack([X[:, 0], X[:, 0] + rng.normal(scale=1e-3, size=400)])
-    y_noisy = X[:, 0] + rng.normal(scale=5.0, size=400)
-    _, lam = select_model(Xc, y_noisy, seed=42)
-    assert lam > 0, f"expected shrinkage under collinearity, got lambda={lam}"
+    # A trained model is a plain dict of named arrays that can be audited.
+    grades = np.clip(np.round(2 + y), 0, 4)
+    model = train_quadratic_ridge_mapping(X, grades, num_classes=5, seed=0)
+    for key in ("variant", "lam", "mu", "sd", "intercept", "beta", "thresholds"):
+        assert key in model, f"model is missing the inspectable field {key!r}"
+    assert model["beta"].shape == (8,), model["beta"].shape
+    assert len(model["thresholds"]) == 4, model["thresholds"]
 
-    print("PASS  design and penalty selection recover known structure")
+    pred = predict_quadratic_ridge_mapping(X, model)
+    assert pred.min() >= 0 and pred.max() <= 4
+    print("PASS  trained model exposes coefficients and explicit grade cutoffs")
 
 
 def _load_cohort():
@@ -100,8 +118,8 @@ def _out_of_fold_grades(X, df, seed):
         for k in range(5):
             te = folds[k]
             tr = np.hstack([folds[j] for j in range(5) if j != k])
-            model = train_adaptive_ridge_mapping(X[tr], y[tr], ncls, seed=seed)
-            p[te] = predict_adaptive_ridge_mapping(X[te], model)
+            model = train_quadratic_ridge_mapping(X[tr], y[tr], ncls, seed=seed)
+            p[te] = predict_quadratic_ridge_mapping(X[te], model)
         preds[region] = p
     e = pd.DataFrame(preds)
     e["e_sum"] = e.sum(axis=1)
@@ -143,6 +161,6 @@ def test_reproduces_published_results():
 
 
 if __name__ == "__main__":
-    test_design_selection_recovers_known_structure()
+    test_penalty_selection_and_model_transparency()
     test_reproduces_published_results()
     print("\nAll checks completed.")

@@ -1,41 +1,33 @@
 """
-Adaptive nested ridge calibration for e-CVRS (v3 calibration).
+Adaptive nested ridge calibration for e-CVRS.
 
-This is the calibration method reported in:
-    Jeong HT, Lee S, Youn J, Jang JW, Youn YC.
-    An Explainable Automated Comprehensive Visual Rating Scale for Brain Atrophy
-    (e-CVRS): Development and Validation Against Expert Ratings, FreeSurfer
-    Volumetry, Cognition, and Cerebrospinal Fluid Biomarkers in Mild Cognitive
-    Impairment.
+This is the RUNNER-UP calibration in the published benchmark. The method
+actually reported in the manuscript is the quadratic-basis ridge in
+``ecvrs/calibration/quadratic_ridge.py``; this module is retained because it
+is the closest competitor and is referenced in the candidate comparison.
 
 Rationale
 ---------
-The v2 calibration (`linear_multi`) fits one ordinary least-squares (OLS) line
-through the 11-feature panel for every region. That assumes each feature acts on
-every regional grade through a straight-line effect of equal stability.
+A single ordinary least-squares line through the 11-feature panel assumes each
+feature acts on every regional grade through a straight-line effect of equal
+stability. This module relaxes both assumptions while remaining fully
+transparent:
 
-This module relaxes both assumptions while remaining fully transparent:
-
-1. **Design selection.** For each region, a nested inner cross-validation decides
-   between a linear design ``x`` and a quadratic basis expansion ``[x, x^2]``.
+1. **Design selection.** For each region, a nested inner cross-validation
+   decides between a linear design ``x`` and a quadratic basis ``[x, x^2]``.
 2. **Shrinkage selection.** The same inner loop selects an L2 (ridge) penalty
    ``lambda`` from a fixed grid, damping unstable coefficients.
 
-Both choices are made *inside the outer training fold only*, so the procedure is
-leakage-controlled in exactly the same way as the baseline. The fitted model is
-still an explicit weighted sum of named, inspectable measurements followed by
-ordinal thresholds -- no latent image representation is learned.
+Both choices are made *inside the outer training fold only*, so the procedure
+is leakage-controlled. The fitted model is an explicit weighted sum of named,
+inspectable measurements followed by ordinal thresholds -- no latent image
+representation is learned.
 
-Selection behaviour is itself an interpretable result. Across the 40 outer
-training folds of the published analysis (8 seeds x 5 folds), the inner loop
-chose the linear design for the left hippocampus in 40/40 folds and the
-quadratic design for the frontal (39/40), parietal (39/40), and temporal (36/40)
-regions -- consistent with focal medial temporal CSF signal versus diffuse,
-non-linear cortical atrophy.
-
-Published performance (ADNI MCI, N=339, leakage-controlled 5-fold CV, seed 42):
-total-score ICC(2,1) = 0.747 (95% CI 0.694-0.788); regional quadratic-weighted
-kappa 0.470-0.652; mean total ICC over 8 fold-assignment seeds 0.745 +/- 0.006.
+Performance with the published hippocampus-anchored windows (ADNI MCI, N=339,
+leakage-controlled 5-fold CV, mean over 8 fold-assignment seeds): total-score
+ICC(2,1) = 0.729, FreeSurfer rho = 0.403, mean cognitive incremental F = 15.61,
+mean absolute CSF rho = 0.164, composite rank 2.29 -- second to
+``quadratic_ridge`` (0.734 / 0.405 / 15.65 / 0.167, composite rank 1.67).
 """
 import numpy as np
 

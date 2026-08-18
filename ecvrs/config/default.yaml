@@ -1,18 +1,69 @@
+# e-CVRS window geometry (published hippocampus-anchored configuration).
+#
+# All offsets are PHYSICAL MILLIMETRES relative to the anatomical centre of mass
+# (COM) of the head, so they transfer across voxel sizes without registration.
+#
+# Orientation convention (LAS, as delivered by ADNI Analyze 7.5):
+#   +x = subject right, +y = anterior, +z = superior.
+# Negative dz therefore means "below COM"; positive dy means "anterior to COM".
+
 seed: 42
+
+# ---------------------------------------------------------------------------
+# Medial temporal atrophy (MTA) - hippocampus-anchored window
+#
+# A bilateral medial band is sampled on a series of coronal slices running from
+# the hippocampal tail to the head. The CSF fraction is averaged over the whole
+# series, so the grade reflects atrophy along the hippocampal long axis rather
+# than the appearance of one arbitrarily chosen slice. The window deliberately
+# covers the temporal horn, choroid fissure, and parahippocampal CSF spaces
+# whose widening the MTA scale quantifies.
+# ---------------------------------------------------------------------------
 mta:
-  dy_offset: -12
-  dz_offset: -12
-  dx_offset: 28
-  tf: 0.25
+  x_inner: 14        # medial edge of the band, mm lateral to the midline
+  x_outer: 34        # lateral edge of the band, mm lateral to the midline
+  dz_center: -18     # vertical centre of the window, mm relative to COM
+  height_z: 25       # window height, mm
+  dy_start: -5       # posterior-most coronal slice (hippocampal tail), mm
+  dy_end: 25         # anterior-most coronal slice (hippocampal head), mm
+  tf: 0.25           # CSF threshold, as a fraction of the 98th-percentile intensity
+
+# Medial temporal proxy-volume box. Shares the vertical extent of the MTA
+# window; the lateral centre is shifted medially so the box tracks the
+# hippocampal formation rather than the lateral temporal cortex.
+mta_volume:
+  x_center: 24       # |x| centre of the left/right box, mm from the midline
+  width_x: 35        # box width, mm
+  dy_center: 10      # box centre along the anterior-posterior axis, mm from COM
+  width_y: 20        # box depth, mm
+
+# ---------------------------------------------------------------------------
+# Lobar windows
+#
+# Each lobar CSF fraction is averaged over n_slices adjacent axial slices
+# centred on the window plane. This is the direct cortical analogue of the
+# multi-slice medial temporal sampling above and makes the lobar features
+# robust to small errors in the vertical position of the COM.
+#
+# n_slices is expressed in SLICES, not millimetres, matching the published
+# implementation. At the 1.00-1.05 mm slice spacing of the analysed ADNI data,
+# 11 slices span approximately +/- 5 mm around the window plane. Rescale this
+# value if your acquisition uses markedly thicker slices.
+# ---------------------------------------------------------------------------
 frontal:
   dz_offset: 20
   dy_offset: 10
   tf: 0.30
+  n_slices: 11
+
 parietal:
   dz_offset: 35
   dy_offset: -10
   tf: 0.20
+  n_slices: 11
+
 temporal:
   dz_offset: -5
   dx_offset: 35
   tf: 0.30
+  n_slices: 11

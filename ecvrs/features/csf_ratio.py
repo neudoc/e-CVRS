@@ -1,155 +1,189 @@
+"""Transparent CSF-fraction features for the e-CVRS subscales.
+
+Every feature is the fraction of voxels inside an explicitly bounded window
+whose intensity falls below a fixed fraction of the scan's 98th-percentile
+intensity. There is no registration, no segmentation, and no learned image
+representation: the number that drives each grade can be recomputed by hand
+from the window bounds and the threshold printed alongside it.
+
+Geometry (see ``ecvrs/config/default.yaml``):
+
+* Medial temporal window -- a bilateral medial band, ``x_inner``-``x_outer`` mm
+  lateral to the midline and ``height_z`` mm tall, centred ``dz_center`` mm
+  below the centre of mass. The CSF fraction is averaged over every coronal
+  slice from ``dy_start`` to ``dy_end`` mm, i.e. from the hippocampal tail
+  forward to the head, so the feature integrates atrophy along the hippocampal
+  long axis instead of sampling a single arbitrary slice.
+* Lobar windows -- averaged over ``n_slices`` adjacent axial slices centred on
+  the window plane, the cortical analogue of the multi-slice medial temporal
+  sampling.
+"""
+
 import numpy as np
 
+
+def _clamp(v, lo, hi):
+    return max(lo, min(hi, v))
+
+
+def _window_ratio(plane, x0, x1, z0, z1, thresh):
+    """CSF fraction inside an axis-aligned patch of a 2D slice."""
+    roi = plane[x0:x1, z0:z1]
+    if roi.size == 0:
+        return 0.0
+    return float((roi < thresh).sum() / roi.size)
+
+
+def extract_medial_temporal_ratios(data, x_com, y_com, z_com, spacing, i98, cfg):
+    """Left/right medial temporal CSF fractions, averaged along the long axis.
+
+    Returns ``(ratio_left, ratio_right, metadata)``. The metadata carries the
+    exact voxel bounds used, so the overlay renderer and the QC checks describe
+    the same window that produced the number.
+    """
+    m = cfg['mta']
+    thresh = m['tf'] * i98
+
+    sx = abs(spacing[0])
+    sy = spacing[1]
+    sz = spacing[2]
+
+    # Vertical extent of the band (shared by both hemispheres).
+    z_center = int(z_com + m['dz_center'] / sz)
+    half_z = int(m['height_z'] / sz) // 2
+    z0 = _clamp(z_center - half_z, 0, data.shape[2])
+    z1 = _clamp(z_center + half_z, 0, data.shape[2])
+
+    # Medial band on each side: |x| from x_inner to x_outer.
+    bands = {}
+    for side, sign in (('lh', -1), ('rh', 1)):
+        xa = int(x_com + sign * m['x_inner'] / sx)
+        xb = int(x_com + sign * m['x_outer'] / sx)
+        lo, hi = (xa, xb) if xa <= xb else (xb, xa)
+        bands[side] = (_clamp(lo, 0, data.shape[0]), _clamp(hi, 0, data.shape[0]))
+
+    # Coronal slices from the hippocampal tail (dy_start) to the head (dy_end).
+    dys = range(int(m['dy_start']), int(m['dy_end']) + 1)
+    y_voxels = [_clamp(int(y_com + dy / sy), 0, data.shape[1] - 1) for dy in dys]
+
+    per_side = {}
+    for side, (x0, x1) in bands.items():
+        vals = [_window_ratio(data[:, y, :], x0, x1, z0, z1, thresh) for y in y_voxels]
+        per_side[side] = float(np.mean(vals)) if vals else 0.0
+
+    y_mid = y_voxels[len(y_voxels) // 2]
+    metadata = {
+        'y_mta_vox': y_mid,                      # representative slice for display
+        'y_mta_range': (y_voxels[0], y_voxels[-1]),
+        'n_mta_slices': len(y_voxels),
+        'lh_x': bands['lh'],
+        'rh_x': bands['rh'],
+        'z_mta': (z0, z1),
+        'mta_thresh': float(thresh),
+    }
+    return per_side['lh'], per_side['rh'], metadata
+
+
+def _lobar_boxes(region, data, x_com, y_com, spacing, cfg):
+    """In-plane bounding boxes for a lobar window, as (x0, x1, y0, y1) tuples."""
+    sx = abs(spacing[0])
+    sy = spacing[1]
+    c = cfg[region]
+
+    if region == 'frontal':
+        y0 = int(y_com + c['dy_offset'] / sy)
+        y1 = int(y_com + (c['dy_offset'] + 40) / sy)
+        x0 = int(x_com - 40 / sx)
+        x1 = int(x_com + 40 / sx)
+        boxes = [(x0, x1, y0, y1)]
+    elif region == 'parietal':
+        y0 = int(y_com + (c['dy_offset'] - 40) / sy)
+        y1 = int(y_com + c['dy_offset'] / sy)
+        x0 = int(x_com - 40 / sx)
+        x1 = int(x_com + 40 / sx)
+        boxes = [(x0, x1, y0, y1)]
+    else:  # temporal: bilateral lateral boxes
+        dx = c['dx_offset']
+        y0 = int(y_com - 30 / sy)
+        y1 = int(y_com + 30 / sy)
+        lx0 = int(x_com - (dx + 25) / sx)
+        lx1 = int(x_com - dx / sx)
+        rx0 = int(x_com + dx / sx)
+        rx1 = int(x_com + (dx + 25) / sx)
+        boxes = [(lx0, lx1, y0, y1), (rx0, rx1, y0, y1)]
+
+    clamped = []
+    for (bx0, bx1, by0, by1) in boxes:
+        clamped.append((_clamp(bx0, 0, data.shape[0] - 1), _clamp(bx1, 0, data.shape[0] - 1),
+                        _clamp(by0, 0, data.shape[1] - 1), _clamp(by1, 0, data.shape[1] - 1)))
+    return clamped
+
+
+def extract_lobar_ratio(data, x_com, y_com, z_com, spacing, i98, cfg, region):
+    """CSF fraction for one lobar window, averaged over adjacent axial slices."""
+    c = cfg[region]
+    thresh = c['tf'] * i98
+    sz = spacing[2]
+
+    z_center = _clamp(int(z_com + c['dz_offset'] / sz), 0, data.shape[2] - 1)
+    # n_slices is a slice count (see config notes); 11 slices ~ +/- 5 mm at
+    # the 1.0-1.05 mm slice spacing of the analysed data.
+    n_half = int(c.get('n_slices', 1)) // 2
+
+    boxes = _lobar_boxes(region, data, x_com, y_com, spacing, cfg)
+
+    ratios = []
+    for dz in range(-n_half, n_half + 1):
+        z = _clamp(z_center + dz, 0, data.shape[2] - 1)
+        csf = 0
+        total = 0
+        for (x0, x1, y0, y1) in boxes:
+            roi = data[x0:x1, y0:y1, z]
+            if roi.size > 0:
+                csf += int((roi < thresh).sum())
+                total += roi.size
+        ratios.append(csf / total if total > 0 else 0.0)
+
+    return float(np.mean(ratios)), z_center, boxes, 2 * n_half + 1
+
+
 def extract_features(data, x_com, y_com, z_com, spacing, i98, cfg):
-    """
-    Extracts the local CSF ratios and ROI coordinates for the e-CVRS subscales.
+    """Extract the five regional CSF fractions and the window metadata.
+
     Returns:
-        ratios: dict of float ratios
-        metadata: dict of coordinate slices and bounds for visualization
+        ratios: dict of the five transparent CSF-fraction features
+        metadata: voxel bounds and thresholds for visualisation and QC
     """
-    # 1. Hippocampus MTA Left/Right
-    # Coronal slice y_mta
-    dy_mta = cfg['mta']['dy_offset']
-    dz_mta = cfg['mta']['dz_offset']
-    dx_mta = cfg['mta']['dx_offset']
-    tf_mta = cfg['mta']['tf']
-    
-    y_mta_vox = int(y_com + dy_mta / spacing[1])
-    z_mta_vox = int(z_com + dz_mta / spacing[2])
-    dx_l_vox = int(-dx_mta / abs(spacing[0]))
-    dx_r_vox = int(dx_mta / abs(spacing[0]))
-    
-    w_x_vox = int(35 / abs(spacing[0]))
-    w_z_vox = int(25 / spacing[2])
-    
-    lh_x_start = max(0, int(x_com + dx_l_vox - w_x_vox//2))
-    lh_x_end = min(data.shape[0], int(x_com + dx_l_vox + w_x_vox//2))
-    rh_x_start = max(0, int(x_com + dx_r_vox - w_x_vox//2))
-    rh_x_end = min(data.shape[0], int(x_com + dx_r_vox + w_x_vox//2))
-    
-    z_mta_start = max(0, int(z_mta_vox - w_z_vox//2))
-    z_mta_end = min(data.shape[2], int(z_mta_vox + w_z_vox//2))
-    
-    csf_thresh_mta = tf_mta * i98
-    
-    # 5-slice average for MTA
-    l_mta_ratios = []
-    r_mta_ratios = []
-    for y in range(y_mta_vox - 2, y_mta_vox + 3):
-        y_idx = max(0, min(data.shape[1]-1, y))
-        sd = data[:, y_idx, :]
-        l_roi = sd[lh_x_start:lh_x_end, z_mta_start:z_mta_end]
-        r_roi = sd[rh_x_start:rh_x_end, z_mta_start:z_mta_end]
-        l_mta_ratios.append((l_roi < csf_thresh_mta).sum() / l_roi.size if l_roi.size > 0 else 0)
-        r_mta_ratios.append((r_roi < csf_thresh_mta).sum() / r_roi.size if r_roi.size > 0 else 0)
-        
-    ratio_hippo_lt = np.mean(l_mta_ratios)
-    ratio_hippo_rt = np.mean(r_mta_ratios)
-    
-    # 2. Frontal Lobe Atrophy
-    dz_front = cfg['frontal']['dz_offset']
-    dy_front = cfg['frontal']['dy_offset']
-    tf_front = cfg['frontal']['tf']
-    
-    z_front_vox = int(z_com + dz_front / spacing[2])
-    f_y_start = int(y_com + dy_front / spacing[1])
-    f_y_end = int(y_com + (dy_front + 40) / spacing[1])
-    f_x_start = int(x_com - 40 / abs(spacing[0]))
-    f_x_end = int(x_com + 40 / abs(spacing[0]))
-    
-    z_front_vox = max(0, min(data.shape[2]-1, z_front_vox))
-    f_y_start = max(0, min(data.shape[1]-1, f_y_start))
-    f_y_end = max(0, min(data.shape[1]-1, f_y_end))
-    f_x_start = max(0, min(data.shape[0]-1, f_x_start))
-    f_x_end = max(0, min(data.shape[0]-1, f_x_end))
-    
-    csf_thresh_front = tf_front * i98
-    f_roi = data[f_x_start:f_x_end, f_y_start:f_y_end, z_front_vox]
-    ratio_front = (f_roi < csf_thresh_front).sum() / f_roi.size if f_roi.size > 0 else 0
-    
-    # 3. Parietal Lobe Atrophy
-    dz_parietal = cfg['parietal']['dz_offset']
-    dy_parietal = cfg['parietal']['dy_offset']
-    tf_parietal = cfg['parietal']['tf']
-    
-    z_parietal_vox = int(z_com + dz_parietal / spacing[2])
-    p_y_start = int(y_com + (dy_parietal - 40) / spacing[1])
-    p_y_end = int(y_com + dy_parietal / spacing[1])
-    p_x_start = int(x_com - 40 / abs(spacing[0]))
-    p_x_end = int(x_com + 40 / abs(spacing[0]))
-    
-    z_parietal_vox = max(0, min(data.shape[2]-1, z_parietal_vox))
-    p_y_start = max(0, min(data.shape[1]-1, p_y_start))
-    p_y_end = max(0, min(data.shape[1]-1, p_y_end))
-    p_x_start = max(0, min(data.shape[0]-1, p_x_start))
-    p_x_end = max(0, min(data.shape[0]-1, p_x_end))
-    
-    csf_thresh_parietal = tf_parietal * i98
-    p_roi = data[p_x_start:p_x_end, p_y_start:p_y_end, z_parietal_vox]
-    ratio_parietal = (p_roi < csf_thresh_parietal).sum() / p_roi.size if p_roi.size > 0 else 0
-    
-    # 4. Temporal Lobe Atrophy
-    dz_temporal = cfg['temporal']['dz_offset']
-    dx_temporal = cfg['temporal']['dx_offset']
-    tf_temporal = cfg['temporal']['tf']
-    
-    z_temporal_vox = int(z_com + dz_temporal / spacing[2])
-    t_y_start = int(y_com - 30 / spacing[1])
-    t_y_end = int(y_com + 30 / spacing[1])
-    t_x_l_start = int(x_com - (dx_temporal + 25) / abs(spacing[0]))
-    t_x_l_end = int(x_com - dx_temporal / abs(spacing[0]))
-    t_x_r_start = int(x_com + dx_temporal / abs(spacing[0]))
-    t_x_r_end = int(x_com + (dx_temporal + 25) / abs(spacing[0]))
-    
-    z_temporal_vox = max(0, min(data.shape[2]-1, z_temporal_vox))
-    t_y_start = max(0, min(data.shape[1]-1, t_y_start))
-    t_y_end = max(0, min(data.shape[1]-1, t_y_end))
-    t_x_l_start = max(0, min(data.shape[0]-1, t_x_l_start))
-    t_x_l_end = max(0, min(data.shape[0]-1, t_x_l_end))
-    t_x_r_start = max(0, min(data.shape[0]-1, t_x_r_start))
-    t_x_r_end = max(0, min(data.shape[0]-1, t_x_r_end))
-    
-    csf_thresh_temporal = tf_temporal * i98
-    t_roi_l = data[t_x_l_start:t_x_l_end, t_y_start:t_y_end, z_temporal_vox]
-    t_roi_r = data[t_x_r_start:t_x_r_end, t_y_start:t_y_end, z_temporal_vox]
-    
-    csf_sum = 0
-    total_size = 0
-    if t_roi_l.size > 0:
-        csf_sum += (t_roi_l < csf_thresh_temporal).sum()
-        total_size += t_roi_l.size
-    if t_roi_r.size > 0:
-        csf_sum += (t_roi_r < csf_thresh_temporal).sum()
-        total_size += t_roi_r.size
-    ratio_temporal = csf_sum / total_size if total_size > 0 else 0
-    
-    # 5-slice averages of cortical regions to stabilize values (Optional or for future use)
+    lt, rt, metadata = extract_medial_temporal_ratios(
+        data, x_com, y_com, z_com, spacing, i98, cfg)
+
+    ratio_front, z_f, f_boxes, n_f = extract_lobar_ratio(
+        data, x_com, y_com, z_com, spacing, i98, cfg, 'frontal')
+    ratio_parietal, z_p, p_boxes, n_p = extract_lobar_ratio(
+        data, x_com, y_com, z_com, spacing, i98, cfg, 'parietal')
+    ratio_temporal, z_t, t_boxes, n_t = extract_lobar_ratio(
+        data, x_com, y_com, z_com, spacing, i98, cfg, 'temporal')
+
     ratios = {
-        'Auto_Lt_Ratio': ratio_hippo_lt,
-        'Auto_Rt_Ratio': ratio_hippo_rt,
+        'Auto_Lt_Ratio': lt,
+        'Auto_Rt_Ratio': rt,
         'Auto_Front_Ratio': ratio_front,
         'Auto_Parietal_Ratio': ratio_parietal,
-        'Auto_Temporal_Ratio': ratio_temporal
+        'Auto_Temporal_Ratio': ratio_temporal,
     }
-    
-    metadata = {
-        'y_mta_vox': y_mta_vox,
-        'lh_x': (lh_x_start, lh_x_end),
-        'rh_x': (rh_x_start, rh_x_end),
-        'z_mta': (z_mta_start, z_mta_end),
-        
-        'z_front_vox': z_front_vox,
-        'f_x': (f_x_start, f_x_end),
-        'f_y': (f_y_start, f_y_end),
-        
-        'z_parietal_vox': z_parietal_vox,
-        'p_x': (p_x_start, p_x_end),
-        'p_y': (p_y_start, p_y_end),
-        
-        'z_temporal_vox': z_temporal_vox,
-        't_x_l': (t_x_l_start, t_x_l_end),
-        't_x_r': (t_x_r_start, t_x_r_end),
-        't_y': (t_y_start, t_y_end)
-    }
-    
+
+    fx0, fx1, fy0, fy1 = f_boxes[0]
+    px0, px1, py0, py1 = p_boxes[0]
+    (tlx0, tlx1, ty0, ty1), (trx0, trx1, _, _) = t_boxes
+
+    metadata.update({
+        'z_front_vox': z_f, 'f_x': (fx0, fx1), 'f_y': (fy0, fy1), 'n_front_slices': n_f,
+        'z_parietal_vox': z_p, 'p_x': (px0, px1), 'p_y': (py0, py1), 'n_parietal_slices': n_p,
+        'z_temporal_vox': z_t, 't_x_l': (tlx0, tlx1), 't_x_r': (trx0, trx1),
+        't_y': (ty0, ty1), 'n_temporal_slices': n_t,
+        'front_thresh': float(cfg['frontal']['tf'] * i98),
+        'parietal_thresh': float(cfg['parietal']['tf'] * i98),
+        'temporal_thresh': float(cfg['temporal']['tf'] * i98),
+    })
+
     return ratios, metadata
