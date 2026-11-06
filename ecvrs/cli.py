@@ -33,7 +33,9 @@ def run_extract(args):
         print(f"Input directory not found: {args.input_dir}")
         sys.exit(1)
         
-    hdr_files = [f for f in os.listdir(args.input_dir) if f.endswith('.hdr')]
+    # Sorted so that the row order of the output (and therefore the fold assignment in
+    # `evaluate`) is identical on every filesystem; the published analysis used this order.
+    hdr_files = sorted(f for f in os.listdir(args.input_dir) if f.endswith('.hdr'))
     print(f"Found {len(hdr_files)} Analyze MRI scans in {args.input_dir}.")
     
     results = []
@@ -428,59 +430,28 @@ def run_evaluate(args):
     print(f"Plots saved to {args.output_dir}")
 
 def run_render(args):
-    # Renders explanatory visual overlays for a single case
+    """Explanatory overlay for one scan, graded by the locked calibration model."""
+    import json
+    from ecvrs.viz.explain import render_explanation
     with open(args.config, 'r') as f:
         cfg = yaml.safe_load(f)
-        
-    # Get RID from filepath
-    match = re.search(r'_S_(\d+)_', args.scan)
-    if not match:
-        print("Could not parse subject RID from file path. Ensure naming matches ADNI.")
-        sys.exit(1)
-    rid = int(match.group(1))
-    
-    print(f"Extracting features and rendering overlays for RID {rid}...")
+    match = re.search(r'_S_(\d+)_', os.path.basename(args.scan))
+    rid = int(match.group(1)) if match else os.path.splitext(os.path.basename(args.scan))[0]
+    model = json.load(open(args.model))
+
     data, affine, spacing = load_mri(args.scan)
     data = standardize_orientation(data, affine)
     i98 = np.percentile(data[::2, ::2, ::2], 98)
-    
     x_com, y_com, z_com, com_pass, _ = calculate_com(data, i98)
     ratios, r_meta = extract_features(data, x_com, y_com, z_com, spacing, i98, cfg)
-    
-    # Dummy scores for rendering labels (requires thresholds file or defaults)
-    # If a ratings file is provided, we can find thresholds or we just show quantile mappings
-    # For standalone rendering, we map using the default thresholds learned globally on ADNI.
-    # Standard ADNI e-CVRS thresholds for ratios:
-    # Lt Hippo: [0.038, 0.057, 0.082, 0.116]
-    # Rt Hippo: [0.041, 0.060, 0.085, 0.120]
-    # Frontal: [0.015, 0.024, 0.038]
-    # Parietal: [0.018, 0.028, 0.042]
-    # Temporal: [0.022, 0.034, 0.050]
-    thresh_map = {
-        'Lt': [0.038, 0.057, 0.082, 0.116],
-        'Rt': [0.041, 0.060, 0.085, 0.120],
-        'Front': [0.015, 0.024, 0.038],
-        'Parietal': [0.018, 0.028, 0.042],
-        'Temporal': [0.022, 0.034, 0.050]
-    }
-    
-    def map_val(val, cuts):
-        for idx, c in enumerate(cuts):
-            if val < c:
-                return idx
-        return len(cuts)
-        
-    scores = {
-        'e_Hippo_Lt': map_val(ratios['Auto_Lt_Ratio'], thresh_map['Lt']),
-        'e_Hippo_Rt': map_val(ratios['Auto_Rt_Ratio'], thresh_map['Rt']),
-        'e_Front': map_val(ratios['Auto_Front_Ratio'], thresh_map['Front']),
-        'e_Parietal': map_val(ratios['Auto_Parietal_Ratio'], thresh_map['Parietal']),
-        'e_Temporal': map_val(ratios['Auto_Temporal_Ratio'], thresh_map['Temporal']),
-    }
-    scores['e_Atrophy_Sum'] = sum(scores.values())
-    
-    save_mri_overlays(data, x_com, y_com, z_com, spacing, i98, r_meta, scores, ratios, thresh_map, args.output_dir, rid)
-    print(f"Overlay summary successfully generated and saved to {os.path.join(args.output_dir, 'overlays', f'{rid}_summary.png')}")
+    volumes = extract_proxy_volumes(data, x_com, y_com, z_com, spacing, i98, cfg)
+    feats = dict(ratios); feats.update(volumes)
+
+    out = os.path.join(args.output_dir, 'overlays', f'{rid}_explanation.png')
+    grades, total = render_explanation(data, spacing, (x_com, y_com, z_com), i98, feats, r_meta,
+                                       cfg, model, rid, out)
+    print('Grades (locked model):', {k: v[2] for k, v in grades.items()}, 'total', total)
+    print(f"Explanatory overlay saved to {out}")
 
 def main():
     parser = argparse.ArgumentParser(description="e-CVRS Automated Visual Rating Pipeline CLI")
@@ -517,6 +488,7 @@ def main():
     p_render.add_argument("--scan", type=str, required=True, help="Path to raw Analyze header (.hdr) scan")
     p_render.add_argument("--config", type=str, default="ecvrs/config/default.yaml", help="Configuration YAML path")
     p_render.add_argument("--output_dir", type=str, default=".", help="Directory to save visual overlays")
+    p_render.add_argument("--model", type=str, default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "models", "locked_model_adni_mci.json"), help="Locked calibration model (JSON)")
 
     args = parser.parse_args()
 

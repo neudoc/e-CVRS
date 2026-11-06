@@ -18,6 +18,12 @@ import numpy as np, pandas as pd
 
 auto = pd.read_csv(DATA_DIR / 'e-CVRS_automated_scores.csv')
 man  = pd.read_excel(DATA_DIR / 'ADNI_MRI_rating.xlsx')
+# Laterality alignment. The expert MTA grades in ADNI_MRI_rating.xlsx were recorded in
+# radiological display convention (screen left = patient right), so the 'Hippo_Lt' column
+# holds the patient's right hemisphere and vice versa. Swap them to anatomical laterality,
+# the convention of the e-CVRS windows and of FreeSurfer (ST29SV left, ST88SV right).
+# The check at the end of this script verifies the alignment against FreeSurfer asymmetry.
+man[['Hippo_Lt', 'Hippo_Rt']] = man[['Hippo_Rt', 'Hippo_Lt']].values
 df = pd.merge(auto, man, on='RID')          # 339
 print('paired cohort N =', len(df))
 
@@ -73,3 +79,15 @@ print(f'  expert total vs FS rho   {rho_m:.3f}   (0.472)')
 for col, expect in [('Auto_Lt_Ratio', 0.413), ('Auto_Rt_Ratio', 0.358)]:
     r, _ = spearmanr(df.loc[ok, col], -df.loc[ok, 'FS_Hippo_Total'])
     print(f'  raw {col:<16} {r:.3f}   ({expect:.3f})')
+
+# Laterality check: left-minus-right asymmetry of the expert MTA grades, after the
+# alignment above, and of the raw e-CVRS medial CSF ratios should both run in the same
+# direction as FreeSurfer hippocampal asymmetry (right minus left volume; positive =
+# smaller left hippocampus). Expected rho: expert +0.251, raw e-CVRS +0.157.
+lr = df[['RID']].merge(fs[['RID', 'ST29SV', 'ST88SV']], on='RID', how='left')
+okl = lr.ST29SV.notna().values & lr.ST88SV.notna().values
+fs_asym = (lr.ST88SV - lr.ST29SV).values[okl]
+for name, v, expect in [('expert MTA L-R', (df.Hippo_Lt - df.Hippo_Rt).values, 0.251),
+                        ('raw e-CVRS L-R', (df.Auto_Lt_Ratio - df.Auto_Rt_Ratio).values, 0.157)]:
+    r, _ = spearmanr(v[okl], fs_asym)
+    print(f'  laterality {name:<16} {r:+.3f}   ({expect:+.3f})')

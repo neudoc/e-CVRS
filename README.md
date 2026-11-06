@@ -132,6 +132,31 @@ Total Sum    ICC(2,1):       0.7482 [95% CI: 0.6961 - 0.7930]
 python -m ecvrs.cli render --scan /path/to/subject.hdr --output_dir case_out
 ```
 
+The overlay is graded by the **locked calibration model**
+(`ecvrs/models/locked_model_adni_mci.json`, fitted on all 339 ADNI MCI participants;
+regenerate with `python analysis/export_locked_model.py`). The overlay shows:
+
+* the medial temporal windows on the hippocampal tail, body and head slices of the 31
+  averaged coronal slices;
+* the lobar windows on the centre slice of each 11-slice series;
+* the CSF masks, drawn with the same thresholds the features use;
+* the 11 feature values;
+* for every region, the continuous score, the model cut-offs and the resulting grade.
+
+The grades in the overlay are therefore exactly the grades e-CVRS reports.
+(Versions up to commit 1b00f1e labelled the overlay with generic cut-offs; this was
+corrected during peer review.)
+
+**Reproducibility note.** `extract` processes scans in sorted file-name order. The outer
+folds in `evaluate`/`benchmark` are assigned by row order, so the published fold
+assignment requires this order.
+
+**Revision analyses.** `analysis/revision/` contains the analyses added during peer review:
+selection-honest (nested) model selection, sub-scale ICC versus expert inter-rater
+reliability, paired bootstrap comparisons between measures, and supplementary tables and
+figures. Run each with `ECVRS_OUT_DIR=<analysis_out> python analysis/revision/<script>.py .`
+after `benchmark.py` (`supp_analyses.py` also takes the scan-sequence table and an output folder for figures).
+
 ---
 
 ## Window geometry
@@ -200,7 +225,8 @@ ecvrs/
 │   ├── regression.py         # OLS, nested F-tests, Benjamini–Hochberg
 │   └── validate.py           # cross-verification against scikit-learn / pingouin
 ├── viz/
-│   └── overlays.py           # explanatory annotated slice overlays (PNG)
+│   ├── overlays.py           # legacy single-slice overlay
+│   └── explain.py            # explanatory overlay graded by the locked model (PNG)
 ├── qc/
 │   └── checks.py             # dimension checks and out-of-bounds window flags
 └── cli.py                    # command-line entry point

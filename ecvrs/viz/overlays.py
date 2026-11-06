@@ -66,7 +66,7 @@ def save_mri_overlays(data, x_com, y_com, z_com, spacing, i98, r_meta, scores, r
     
     # CSF mask
     f_mask = np.zeros_like(slice_f, dtype=bool)
-    f_mask[f_x[0]:f_x[1], f_y[0]:f_y[1]] = slice_f[f_x[0]:f_x[1], f_y[0]:f_y[1]] < (0.30 * i98)
+    f_mask[f_x[0]:f_x[1], f_y[0]:f_y[1]] = slice_f[f_x[0]:f_x[1], f_y[0]:f_y[1]] < (r_meta.get('front_thresh', 0.30 * i98))
     ax.imshow(np.where(f_mask.T, 1, np.nan), cmap='Wistia_r', origin='lower', alpha=0.6)
     
     ax.set_title(f"Frontal Lobe Axial (z={z_f})\nRatio: {ratios['Auto_Front_Ratio']:.3f} (Score {scores['e_Front']})")
@@ -86,7 +86,7 @@ def save_mri_overlays(data, x_com, y_com, z_com, spacing, i98, r_meta, scores, r
     ax.add_patch(rect_p)
     
     p_mask = np.zeros_like(slice_p, dtype=bool)
-    p_mask[p_x[0]:p_x[1], p_y[0]:p_y[1]] = slice_p[p_x[0]:p_x[1], p_y[0]:p_y[1]] < (0.22 * i98)
+    p_mask[p_x[0]:p_x[1], p_y[0]:p_y[1]] = slice_p[p_x[0]:p_x[1], p_y[0]:p_y[1]] < (r_meta.get('parietal_thresh', 0.20 * i98))
     ax.imshow(np.where(p_mask.T, 1, np.nan), cmap='Oranges_r', origin='lower', alpha=0.6)
     
     ax.set_title(f"Parietal Lobe Axial (z={z_p})\nRatio: {ratios['Auto_Parietal_Ratio']:.3f} (Score {scores['e_Parietal']})")
