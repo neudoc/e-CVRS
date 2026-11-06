@@ -157,6 +157,16 @@ reliability, paired bootstrap comparisons between measures, and supplementary ta
 figures. Run each with `ECVRS_OUT_DIR=<analysis_out> python analysis/revision/<script>.py .`
 after `benchmark.py` (`supp_analyses.py` also takes the scan-sequence table and an output folder for figures).
 
+**Sensitivity analyses (Supplementary Tables S5–S6, Figure S4).** These re-read the scans:
+
+1. `window_profile_extract.py REPO SCAN_DIR OUT_DIR cohort_merged.csv` stores per-slice medial temporal CSF ratios
+   (−15 to +35 mm from the COM) for each scan; `window_assemble.py` builds any anterior–posterior window from them.
+2. `threshold_sensitivity_extract.py REPO SCAN_DIR OUT_DIR cohort_merged.csv` stores features with each CSF
+   intensity fraction changed by ±0.05 (one at a time and jointly) and with head-mask fractions 0.10 and 0.14.
+3. `run_sensitivity_variants.py REPO OUT_ROOT --cohort cohort_merged.csv --window <step-1 dir> --threshold <step-2 dir>`
+   builds one cohort per variant, runs `benchmark.py` and `final_analysis.py` for each, and writes `sensitivity_summary.csv`.
+   The published setting is reproduced exactly by `win_m5_p25` and `thr_base`.
+
 ---
 
 ## Window geometry

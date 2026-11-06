@@ -49,9 +49,9 @@ box(0.09, 0.38, 0.38, 0.24, 'Quadratic ridge calibration (per region)\nexplicit 
 box(0.53, 0.38, 0.30, 0.24, 'Ordinal thresholding\ngrade cutoffs maximize\nquadratic-weighted κ\n(training fold only)')
 arrow(0.62, 0.72, 0.40, 0.62); arrow(0.47, 0.50, 0.53, 0.50)
 box(0.09, 0.05, 0.30, 0.22, 'Automated grades\nMTA L/R (0–4)\nfrontal/parietal/temporal (0–3)\ntotal atrophy score (0–17)', bold=True)
-box(0.46, 0.05, 0.45, 0.22, 'Multi-domain validation\nmanual CVRS agreement (κ, ICC)\nFreeSurfer v7 hippocampal volume (ρ)\nsix cognitive outcomes (incremental F, BH)\nCSF Aβ42 / p-tau (ρ)  — all out-of-fold', ec=C_FS, fc='#FDF3EC')
+box(0.46, 0.05, 0.45, 0.22, 'Internal validation\nagreement with manual CVRS (κ, ICC)\nFreeSurfer v7 hippocampal volume (ρ)\nsix cognitive outcomes (incremental F, BH)\nCSF Aβ42 / p-tau (ρ)  — all out-of-fold', ec=C_FS, fc='#FDF3EC')
 arrow(0.68, 0.38, 0.30, 0.27); arrow(0.39, 0.16, 0.46, 0.16)
-ax.text(0.5, 0.985, 'Hippocampus-anchored e-CVRS: robust medial temporal sampling → transparent calibration → auditable grades',
+ax.text(0.5, 0.985, 'Hippocampus-anchored e-CVRS: medial temporal sampling → transparent calibration → auditable grades',
         ha='center', va='top', fontsize=10.5, fontweight='bold')
 ax.text(0.245, 0.66, '5-fold outer CV, all fitting inside training folds (leakage-controlled)',
         fontsize=8, style='italic', color='#333')
