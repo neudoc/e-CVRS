@@ -31,31 +31,67 @@ plt.rcParams.update({'font.size': 9, 'font.family': 'DejaVu Sans', 'axes.spines.
                      'grid.linewidth': 0.6, 'axes.axisbelow': True})
 FD = str(FIG_DIR)
 
-# ============ Figure 1: pipeline ============
-fig, ax = plt.subplots(figsize=(10, 5.6)); ax.axis('off'); ax.grid(False)
-def box(x, y, w, h, text, fc='#F2F6FA', ec='#0072B2', fs=8.6, bold=False):
-    ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle='round,pad=0.012', fc=fc, ec=ec, lw=1.2))
-    ax.text(x + w/2, y + h/2, text, ha='center', va='center', fontsize=fs,
-            fontweight='bold' if bold else 'normal', wrap=True)
-def arrow(x1, y1, x2, y2):
-    ax.add_patch(FancyArrowPatch((x1, y1), (x2, y2), arrowstyle='-|>', mutation_scale=13, color='#333', lw=1.1))
-ax.set_xlim(0, 1); ax.set_ylim(0, 1)
-box(0.01, 0.72, 0.20, 0.22, 'Baseline 3D T1 MRI\n(ADNI MCI, N=339)\nno registration,\nno segmentation', bold=True)
-box(0.26, 0.72, 0.21, 0.22, 'Center-of-mass (COM)\nanchoring\nneck stripping;\nphysical-mm offsets')
-box(0.52, 0.72, 0.21, 0.22, 'Hippocampus-anchored\nmedial temporal windows\n+ lobar windows\n(11 transparent features)')
-box(0.78, 0.72, 0.21, 0.22, 'Explanatory overlay\nslice, window box,\nCSF mask, ratio\n(PNG per subject)', ec=C_ACC, fc='#F0FAF6')
-arrow(0.21, 0.83, 0.26, 0.83); arrow(0.47, 0.83, 0.52, 0.83); arrow(0.73, 0.83, 0.78, 0.83)
-box(0.09, 0.38, 0.38, 0.24, 'Quadratic ridge calibration (per region)\nexplicit quadratic feature effects [x, x²]\nridge penalty λ ∈ {0, 0.01, 0.1, 1, 10, 100}\nselected by nested 4-fold inner CV\nrefit on full outer training fold', ec=C_ECVRS, fc='#EAF2FB')
-box(0.53, 0.38, 0.30, 0.24, 'Ordinal thresholding\ngrade cutoffs maximize\nquadratic-weighted κ\n(training fold only)')
-arrow(0.62, 0.72, 0.40, 0.62); arrow(0.47, 0.50, 0.53, 0.50)
-box(0.09, 0.05, 0.30, 0.22, 'Automated grades\nMTA L/R (0–4)\nfrontal/parietal/temporal (0–3)\ntotal atrophy score (0–17)', bold=True)
-box(0.46, 0.05, 0.45, 0.22, 'Internal validation\nagreement with manual CVRS (κ, ICC)\nFreeSurfer v7 hippocampal volume (ρ)\nsix cognitive outcomes (incremental F, BH)\nCSF Aβ42 / p-tau (ρ)  — all out-of-fold', ec=C_FS, fc='#FDF3EC')
-arrow(0.68, 0.38, 0.30, 0.27); arrow(0.39, 0.16, 0.46, 0.16)
-ax.text(0.5, 0.985, 'Hippocampus-anchored e-CVRS: medial temporal sampling → transparent calibration → auditable grades',
+# ============ Figure 1: pipeline and the two evaluation paths ============
+fig, ax = plt.subplots(figsize=(11, 7.4)); ax.axis('off'); ax.grid(False)
+def box(x, y, w, h, text, title=None, fc='#F2F6FA', ec='#0072B2', fs=8.4, bold=False):
+    ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle='round,pad=0.010', fc=fc, ec=ec, lw=1.2))
+    if title:
+        ax.text(x + w/2, y + h - 0.022, title, ha='center', va='top', fontsize=fs + 0.6, fontweight='bold')
+        ax.text(x + w/2, y + (h - 0.045)/2, text, ha='center', va='center', fontsize=fs)
+    else:
+        ax.text(x + w/2, y + h/2, text, ha='center', va='center', fontsize=fs, fontweight='bold' if bold else 'normal')
+def arrow(x1, y1, x2, y2, c='#333'):
+    ax.add_patch(FancyArrowPatch((x1, y1), (x2, y2), arrowstyle='-|>', mutation_scale=12, color=c, lw=1.1))
+def letter(y, t):
+    ax.text(-0.03, y, t, fontsize=12, fontweight='bold', va='center')
+ax.set_xlim(-0.04, 1); ax.set_ylim(0, 1)
+ax.text(0.48, 1.0, 'e-CVRS: feature extraction, calibration, and the two evaluation paths',
         ha='center', va='top', fontsize=10.5, fontweight='bold')
-ax.text(0.245, 0.66, '5-fold outer CV, all fitting inside training folds (leakage-controlled)',
-        fontsize=8, style='italic', color='#333')
-plt.tight_layout(); plt.savefig(f'{FD}/Figure1_pipeline.png', dpi=300, bbox_inches='tight'); plt.close()
+# A. feature extraction (fixed rules)
+y0, h0 = 0.80, 0.13
+letter(y0 + h0/2, 'A')
+box(0.01, y0, 0.215, h0, 'Baseline 3D T1 MRI\n(ADNI MCI, N=339)\nno registration or segmentation')
+box(0.265, y0, 0.215, h0, 'Center-of-mass anchoring\nneck stripping;\nphysical-mm offsets')
+box(0.52, y0, 0.215, h0, 'Hippocampus-anchored MTA\nwindows + lobar windows\n→ 11 named features')
+box(0.775, y0, 0.215, h0, 'Explanatory overlay per scan\nwindows, CSF masks,\nfeatures, grades', ec=C_ACC, fc='#F0FAF6')
+for x in (0.225, 0.48, 0.735): arrow(x, y0 + h0/2, x + 0.04, y0 + h0/2)
+ax.text(0.37, 0.772, 'fixed extraction rules; nothing is fitted', ha='center', fontsize=7.8, style='italic', color='#444')
+# B. calibration of one candidate
+y1, h1 = 0.60, 0.15
+letter(y1 + h1/2, 'B')
+box(0.08, y1, 0.84, h1, 'per region: features → candidate model (e.g. quadratic ridge [x, x²], λ chosen by inner 4-fold CV)\n'
+    '→ grade cut-offs maximizing quadratic-weighted κ → grades for the held-out fold (5-fold outer CV × 8 seeds)',
+    title='Calibration of one candidate model (always inside the outer training fold)', ec=C_ECVRS, fc='#EAF2FB')
+arrow(0.6275, y0, 0.6275, y1 + h1)
+# C. two evaluation paths
+y2, h2 = 0.255, 0.30
+letter(y2 + h2/2, 'C')
+box(0.01, y2, 0.465, h2,
+    'All five candidates evaluated out-of-fold;\n'
+    'composite rank of FreeSurfer ρ, cognitive F and CSF ρ\n'
+    'computed on all participants and eight seeds\n'
+    '→ quadratic ridge chosen once and reported\n\n'
+    'The choice uses the reported outcomes (not nested)\n'
+    'Total ICC 0.748 (primary split); 0.734 (eight-seed mean)',
+    title='Primary analysis (fixed candidate)', ec='#555555', fc='#F7F7F7')
+box(0.525, y2, 0.465, h2,
+    'Inside each outer training fold only:\n'
+    'five candidates evaluated by inner 5-fold CV,\n'
+    'composite rank on training participants,\n'
+    'chosen candidate refitted and applied to the held-out fold\n\n'
+    'Selection repeated inside the folds (still internal validation)\n'
+    'Total ICC 0.736 (primary split); 0.720 (eight-seed mean)',
+    title='Selection-honest analysis (nested)', ec=C_ECVRS, fc='#EAF2FB')
+arrow(0.30, y1, 0.24, y2 + h2); arrow(0.70, y1, 0.76, y2 + h2)
+# D. outputs
+y3, h3 = 0.02, 0.19
+letter(y3 + h3/2, 'D')
+box(0.01, y3, 0.30, h3, 'MTA left/right (0–4)\nfrontal / parietal / temporal (0–3)\ntotal (0–17)', title='Out-of-fold grades')
+box(0.355, y3, 0.635, h3, 'agreement with the expert CVRS rating (κw, ICC, Bland–Altman)\n'
+    'FreeSurfer hippocampal volume (ρ); six cognitive outcomes (incremental F)\n'
+    'CSF Aβ42 and p-tau181 (ρ)', title='Internal validation in one ADNI cohort', ec=C_FS, fc='#FDF3EC')
+arrow(0.24, y2, 0.16, y3 + h3); arrow(0.76, y2, 0.67, y3 + h3); arrow(0.31, y3 + h3/2, 0.355, y3 + h3/2)
+plt.savefig(f'{FD}/Figure1_pipeline.png', dpi=300, bbox_inches='tight'); plt.close()
 
 # ============ Figure 2: agreement ============
 fig, axes = plt.subplots(1, 2, figsize=(10, 4.2))
